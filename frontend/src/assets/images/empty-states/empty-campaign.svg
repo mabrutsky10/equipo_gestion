@@ -1,0 +1,9 @@
+<svg width="280" height="200" viewBox="0 0 280 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="280" height="200" rx="10" fill="#F9FAFB"/>
+  <rect x="60" y="50" width="160" height="100" rx="8" fill="#E5E7EB" stroke="#D1D5DB" stroke-width="2" stroke-dasharray="5,5"/>
+  <circle cx="140" cy="100" r="20" fill="#D1D5DB" opacity="0.5"/>
+  <path d="M130 100 L140 90 L150 100" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <text x="140" y="170" font-family="Arial, sans-serif" font-size="14" fill="#6B7280" text-anchor="middle">Campaña no configurada</text>
+</svg>
+
+

@@ -1,0 +1,73 @@
+<svg width="400" height="300" viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="300" fill="#F3F4F6"/>
+  
+  <!-- Back Row - 11 standing figures -->
+  <ellipse cx="50" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="44" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <ellipse cx="80" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="74" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <ellipse cx="110" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="104" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <ellipse cx="140" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="134" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <ellipse cx="170" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="164" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <ellipse cx="200" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="194" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <ellipse cx="230" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="224" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <ellipse cx="260" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="254" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <ellipse cx="290" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="284" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <ellipse cx="320" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="314" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <ellipse cx="350" cy="80" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="344" y="98" width="12" height="25" fill="#4B5563"/>
+  
+  <!-- Middle Row - 4 kneeling figures -->
+  <ellipse cx="100" cy="140" rx="10" ry="15" fill="#4B5563"/>
+  <rect x="95" y="155" width="10" height="20" fill="#4B5563"/>
+  <rect x="95" y="155" width="10" height="8" fill="#4B5563" rx="2"/>
+  
+  <ellipse cx="150" cy="140" rx="10" ry="15" fill="#4B5563"/>
+  <rect x="145" y="155" width="10" height="20" fill="#4B5563"/>
+  <rect x="145" y="155" width="10" height="8" fill="#4B5563" rx="2"/>
+  
+  <ellipse cx="200" cy="140" rx="10" ry="15" fill="#4B5563"/>
+  <rect x="195" y="155" width="10" height="20" fill="#4B5563"/>
+  <rect x="195" y="155" width="10" height="8" fill="#4B5563" rx="2"/>
+  
+  <ellipse cx="250" cy="140" rx="10" ry="15" fill="#4B5563"/>
+  <rect x="245" y="155" width="10" height="20" fill="#4B5563"/>
+  <rect x="245" y="155" width="10" height="8" fill="#4B5563" rx="2"/>
+  
+  <!-- Front Row -->
+  <!-- Prone figure on left -->
+  <ellipse cx="60" cy="200" rx="15" ry="8" fill="#4B5563" transform="rotate(-20 60 200)"/>
+  
+  <!-- Banner/Flag in center -->
+  <rect x="140" y="190" width="80" height="40" fill="#4B5563" rx="2"/>
+  
+  <!-- Ball in front of banner -->
+  <circle cx="170" cy="210" r="12" fill="#4B5563"/>
+  <path d="M 165 210 Q 170 205 175 210 Q 170 215 165 210" stroke="#374151" stroke-width="1" fill="none"/>
+  
+  <!-- Sitting figure on right -->
+  <ellipse cx="320" cy="200" rx="12" ry="18" fill="#4B5563"/>
+  <rect x="314" y="218" width="12" height="15" fill="#4B5563"/>
+  <ellipse cx="320" cy="235" rx="15" ry="8" fill="#4B5563"/>
+</svg>
+
+

@@ -1,0 +1,10 @@
+<svg width="250" height="200" viewBox="0 0 250 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="250" height="200" rx="10" fill="#F9FAFB"/>
+  <circle cx="80" cy="70" r="25" fill="#E5E7EB"/>
+  <path d="M50 110 Q80 100 110 110" stroke="#D1D5DB" stroke-width="3" fill="none"/>
+  <circle cx="170" cy="70" r="25" fill="#E5E7EB"/>
+  <path d="M140 110 Q170 100 200 110" stroke="#D1D5DB" stroke-width="3" fill="none"/>
+  <text x="125" y="160" font-family="Arial, sans-serif" font-size="14" fill="#6B7280" text-anchor="middle">Sin socios</text>
+</svg>
+
+

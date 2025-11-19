@@ -1,0 +1,103 @@
+PROMPT_LANDING_SOCIOS_CURSOR
+
+You are generating React + TypeScript + Tailwind components for the **Socios Campaign** feature inside the +10 web app.
+
+Goal:
+- Inside the internal “Socios” configuration screen for a team, show:
+  1) A form to configurar la campaña de socios.
+  2) A live **preview** of the public landing.
+  3) A button to open/view the full landing as users (friends & family) will see it.
+
+- The public landing must follow the **same visual style** already used in +10 and be inspired by the two reference cards shown (blue step card and green “Socios” benefits card).
+
+########################################
+### STACK & DESIGN RULES
+########################################
+
+- Stack: **React + TypeScript + TailwindCSS**.
+- Desktop-first, but responsive.
+- General style guidelines (already used in the project):
+  - Background: very light gray / subtle sections.
+  - Cards: `rounded-2xl`, `shadow-sm`, `bg-white`.
+  - Accent colors:
+    - Blues for “pasos / instrucciones”.
+    - Greens for “beneficios de socios” and payment CTA.
+  - Spacing: comfortable, `p-6` / `p-8` in main cards.
+  - Typography:
+    - Headings: `text-lg` / `text-xl` / `font-semibold` or `font-bold`.
+    - Body: `text-sm` / `text-base`, good line-height.
+
+########################################
+### DATA MODEL (PROPS / STATE)
+########################################
+
+Create an interface for the campaign configuration, for example:
+
+type SociosCampaignConfig = {
+  teamName: string;
+  teamSlug: string;        
+  tournamentName: string;
+  teamBadgeUrl: string;    
+  teamPhotoUrl: string;    
+  shortDescription: string; 
+  mercadopagoUrl: string;  
+};
+
+########################################
+### COMPONENTS TO BUILD
+########################################
+
+1. SociosCampaignConfigPage (internal config screen)
+2. SociosCampaignLanding (public landing)
+3. SociosCampaignPreviewFrame (wrapper for preview)
+
+########################################
+### LAYOUT OF THE CONFIG PAGE
+########################################
+
+SociosCampaignConfigPage:
+
+- Two-column layout (form + preview).
+- Form includes: teamName, tournamentName, badge URL, photo URL, description, MercadoPago link.
+- Save button updates config state.
+- Preview shows SociosCampaignLanding.
+- Button: “Ver landing como la verá tu gente”.
+
+########################################
+### STRUCTURE OF THE PUBLIC LANDING
+########################################
+
+Sections:
+
+1) HERO:
+   - Team photo, badge, name, tournament, short description.
+   - CTA: Hacete socio (opens MercadoPago link).
+
+2) HOW IT WORKS (blue-style card):
+   - Title, bullets, explanatory text.
+   - Callout box explaining premios mensuales (camisetas selección Argentina, Inter-Miami, etc.)
+
+3) BENEFITS SECTION (green-style):
+   - Pill “Socios”.
+   - White cards with prize info, competencia info, noticias del equipo.
+   - Footer: ejemplos de cobertura.
+
+4) BOTTOM CTA:
+   - Short line + button to become a socio now.
+
+########################################
+### INTERACTION & STATE
+########################################
+
+- Form updates config.
+- Preview auto-updates.
+- “Ver landing” button opens new tab using /equipos/:teamSlug/socios.
+
+########################################
+### OUTPUT
+########################################
+
+- Generate full React + Tailwind code.
+- All text in Spanish.
+- No external UI libs.
+- Components: SociosCampaignConfigPage, SociosCampaignLanding, SociosCampaignPreviewFrame, and any small subcomponents.

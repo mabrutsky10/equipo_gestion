@@ -1,0 +1,373 @@
+TÍTULO: Especificación de requisitos NO funcionales para el proyecto
+
+OBJETIVO DEL DOCUMENTO
+Este documento define los lineamientos de arquitectura, stack tecnológico y requisitos NO funcionales que TODO el código generado debe respetar. El objetivo es:
+- Correr inicialmente en un entorno local (dev).
+- Facilitar una migración futura a:
+  - Base de datos PostgreSQL gestionada por Supabase (requerido desde el inicio).
+  - AWS Cognito como proveedor de autenticación (en una segunda etapa).
+  - Backend desplegado en AWS Lambda + API Gateway usando un framework serverless (en una segunda etapa).
+- Mantener el frontend en ReactJS + Tailwind CSS, consistente con la landing actual.
+
+El contenido de este archivo debe ser considerado como “contrato de arquitectura” por cualquier código que Cursor/IA genere.
+
+--------------------------------------------------
+1. STACK TECNOLÓGICO (ALTO NIVEL)
+--------------------------------------------------
+
+1.1. Backend
+- Lenguaje: Python (requerido).
+- Framework web sugerido: FastAPI (o similar basado en ASGI, moderno y async).
+- Estilo de arquitectura: Clean Architecture / Hexagonal (Domain + Application + Infrastructure).
+- Entorno de ejecución inicial: servidor local (por ejemplo, `uvicorn`).
+- Futuro entorno de ejecución: AWS Lambda + API Gateway (via Serverless Framework, AWS SAM o similar).
+
+1.2. Base de datos
+- Motor: PostgreSQL.
+- Proveedor: Supabase (requerido).
+- Acceso:
+  - Usar el endpoint / conexión PSQL estándar provisto por Supabase.
+  - No usar características propietarias que dificulten migración a otro Postgres.
+- ORM / acceso a datos:
+  - Sugerido: SQLAlchemy (preferentemente async) + Alembic para migraciones.
+  - Alternativa: psycopg3 + capa propia de repositorios.
+
+1.3. Autenticación y autorización
+- Requisito clave: el mecanismo de autenticación debe estar totalmente desacoplado del resto de la lógica del sistema.
+- Etapa actual:
+  - Se permite una solución local (por ejemplo, JWT emitidos por el propio backend o lib simple).
+- Etapa futura:
+  - Migrar a AWS Cognito con el mínimo cambio posible.
+- En consecuencia:
+  - Definir una INTERFAZ genérica para el proveedor de autenticación (por ejemplo, `AuthProvider`).
+  - Implementar al menos un adaptador concreto: `LocalAuthProvider`.
+  - El diseño debe permitir agregar fácilmente `CognitoAuthProvider` sin modificar la lógica de negocio.
+
+1.4. Frontend
+- Framework: ReactJS.
+- Estilos: Tailwind CSS.
+- Bundler: Vite o Create React App (preferible Vite).
+- Lenguaje: TypeScript preferible, pero puede empezar en JavaScript con tipado progresivo.
+- Comunicación con backend: REST (JSON) inicialmente; considerar GraphQL sólo si aporta valor claro.
+
+--------------------------------------------------
+2. ARQUITECTURA GENERAL
+--------------------------------------------------
+
+2.1. Patrón arquitectónico
+- Usar un enfoque tipo Clean Architecture / Hexagonal:
+  - Capa de Dominio:
+    - Entidades, Value Objects, reglas de negocio puras.
+    - Sin dependencias a frameworks (FastAPI, SQLAlchemy, etc.).
+  - Capa de Aplicación (Use Cases / Services):
+    - Casos de uso orquestan el flujo entre dominio y adaptadores.
+    - Dependen sólo de interfaces (puertos) hacia Auth, Repositorios, etc.
+  - Capa de Infraestructura (Adapters):
+    - Implementaciones concretas de:
+      - Repositorios de datos (Postgres/Supabase).
+      - Proveedor de autenticación (local, y futuro Cognito).
+      - Logging, email, colas, etc.
+  - Capa de Interface / Delivery:
+    - Endpoints HTTP (FastAPI).
+    - DTOs / Schemas para request/response.
+
+2.2. Directrices para favorecer migración a AWS Lambda
+- Todo endpoint debe ser:
+  - Stateless.
+  - Idempotente siempre que sea razonable.
+- No usar almacenamiento en disco local para persistencia de datos relevantes.
+  - Si se requiere almacenamiento temporal, asumir que puede estar en `/tmp` y ser efímero.
+- Uso de conexión a base de datos:
+  - Implementar un pool de conexiones reutilizable.
+  - Evitar abrir/cerrar conexiones por request de manera manual.
+- Evitar las dependencias que supongan:
+  - Procesos en background acoplados al servidor web.
+  - Tareas largas y bloqueantes en el mismo proceso del request (moverlas a colas o background jobs en el futuro).
+
+2.3. Organización de código backend (sugerencia)
+- `/app`
+  - `/domain`
+    - `entities/`
+    - `value_objects/`
+    - `services/` (reglas puras)
+  - `/application`
+    - `use_cases/`
+    - `dto/`
+    - `interfaces/` (puertos como `UserRepository`, `AuthProvider`, etc.)
+  - `/infrastructure`
+    - `db/` (config, sesiones, migraciones)
+    - `repositories/` (implementaciones Postgres/Supabase)
+    - `auth/` (LocalAuthProvider, futuro CognitoAuthProvider)
+    - `logging/`
+    - `config/`
+  - `/presentation`
+    - `api/` (routers FastAPI)
+    - `schemas/` (Pydantic para requests/responses)
+- `main.py`:
+  - Punto de entrada de FastAPI para entorno local y adaptable para Lambda (handler).
+
+--------------------------------------------------
+3. AUTENTICACIÓN Y AUTORIZACIÓN (DESACOPLADA)
+--------------------------------------------------
+
+3.1. Interfaz genérica de autenticación
+- Definir una interfaz (puerto) en la capa de Aplicación/Dominio, por ejemplo:
+
+  - `AuthProvider` debe exponer, como mínimo:
+    - `register_user(...)` o `sign_up(...)`
+    - `authenticate_user(...)` o `sign_in(...)`
+    - `get_current_user(...)` (a partir de token o contexto).
+    - `logout(...)` (si aplica).
+    - `refresh_token(...)` (si aplica).
+  - Métodos específicos extra pueden agregarse, pero la lógica de negocio siempre debe depender de la interfaz, nunca de la implementación.
+
+3.2. Implementación local (etapa actual)
+- `LocalAuthProvider`:
+  - Puede usar:
+    - Usuarios guardados en la misma base de datos Supabase (tabla `users`).
+    - Passwords hasheadas (ej. bcrypt).
+    - Emisión de JWT firmados con secret del backend.
+  - El backend debe:
+    - Manejar login / registro / refresh tokens.
+    - Adjuntar info de usuario al contexto de request (middleware).
+
+3.3. Migración futura a AWS Cognito
+- Requerimientos para facilitar migración:
+  - Nunca usar directamente APIs específicas de Cognito en la lógica de negocio.
+  - Toda interacción con el proveedor de identidad debe pasar por `AuthProvider`.
+  - La verificación de tokens en endpoints:
+    - Debe poder cambiarse de:
+      - Verificar JWT propios -> a
+      - Verificar JWT firmados por Cognito (jwks, etc.).
+  - Cuando se implemente `CognitoAuthProvider`:
+    - Debe cumplir el mismo contrato que `LocalAuthProvider`.
+    - Los endpoints HTTP NO deben cambiar su contrato de request/response.
+
+3.4. Autorización
+- La autorización (permisos, roles, etc.) debe:
+  - Basarse en claims del usuario o información de dominio (roles guardados en DB).
+  - Implementarse preferentemente como:
+    - Dependencias / decorators en FastAPI.
+    - Servicios de dominio que revisan permisos.
+
+--------------------------------------------------
+4. BASE DE DATOS (SUPABASE + POSTGRESQL)
+--------------------------------------------------
+
+4.1. Conexión
+- Usar la conexión PSQL estándar de Supabase:
+  - Host, puerto, dbname, user y password provistos por Supabase.
+  - Variables de entorno para credenciales, NUNCA hardcodear.
+- No asumir que el código se ejecuta dentro de Supabase Functions; el backend es independiente.
+
+4.2. Diseño de acceso a datos
+- Usar patron Repositorios:
+  - Definir interfaces en `application/interfaces` (ej. `UserRepository`).
+  - Implementar concretas en `infrastructure/repositories` usando SQLAlchemy.
+- Mantener las migraciones de DB:
+  - Via Alembic u otra herramienta de migraciones.
+  - Scripts con versionado.
+  - Nunca modificar tablas directamente sin migración.
+
+4.3. Buenas prácticas
+- Evitar lógica de negocio compleja en triggers/procedimientos almacenados.
+  - La lógica de negocio debe vivir en la capa de dominio.
+- Índices:
+  - Definir índices necesarios para queries críticas.
+- Integridad:
+  - Usar foreign keys y constraints para mantener consistencia.
+
+--------------------------------------------------
+5. FRONTEND (REACT + TAILWIND)
+--------------------------------------------------
+
+5.1. Stack frontend
+- ReactJS a través de Vite (preferible) o CRA.
+- Tailwind CSS como sistema de estilos principal.
+- Organización:
+  - `src/components/` (componentes reutilizables).
+  - `src/pages/` o `src/routes/` (según routing).
+  - `src/hooks/` (custom hooks).
+  - `src/services/` (clientes HTTP).
+  - `src/context/` o `src/store/` (estado global si se usa context, Zustand, etc.).
+
+5.2. Comunicación con backend
+- Usar fetch/axios (o similar) con:
+  - Cliente HTTP centralizado que:
+    - Inyecte automáticamente el token de autenticación (si hay).
+    - Maneje errores de red / token expirado.
+- El frontend no debe conocer detalles de la implementación interna del backend, sólo endpoints y contratos.
+
+5.3. Autenticación en el frontend
+- Debe:
+  - Manejar tokens (localStorage o cookies, según decisión de seguridad).
+  - Exponer contexto de usuario autenticado.
+  - Proteger rutas privadas a nivel de router.
+
+5.4. Estilo y diseño
+- Tailwind CSS:
+  - Seguir un `design system` básico (tipografías, paleta de colores, componentes base).
+- Layout:
+  - Componentes comunes para layout (Header, Footer, Sidebar, etc.).
+
+5.5. Pantalla de Creación de Campaña de Socios
+- Validaciones de lado del cliente:
+  - Las validaciones básicas (campos requeridos, formato numérico) deben ejecutarse en el frontend antes de enviar al backend.
+  - Proporcionar feedback inmediato al usuario sobre errores de validación.
+  - No bloquear la UI durante las validaciones (deben ser síncronas e instantáneas).
+- Performance y UX:
+  - La carga inicial de datos del equipo no debe bloquear la renderización completa de la pantalla.
+  - Mostrar estados de carga claros (loading states) durante operaciones asíncronas.
+  - Los botones de acción deben deshabilitarse durante operaciones de guardado/publicación para evitar múltiples envíos.
+  - Feedback visual inmediato al usuario (mensajes de éxito/error).
+- Consistencia visual y reutilización:
+  - Reutilizar componentes de formulario existentes (inputs, textareas, selects) del proyecto.
+  - Seguir el mismo patrón de diseño y espaciado usado en otras pantallas (Login, PanelSocios).
+  - Mantener consistencia en colores, tipografías y espaciados según el design system definido.
+- Manejo de archivos (logo):
+  - Validación de tamaño de archivo en el cliente antes de subir (máximo 5MB).
+  - Vista previa inmediata del logo seleccionado.
+  - En una futura iteración, el logo se subirá a un servicio de almacenamiento (S3, Supabase Storage, etc.).
+  - Por ahora, se almacena como base64 en el estado local (preparado para migración futura).
+
+--------------------------------------------------
+6. CONFIGURACIÓN Y ENTORNOS
+--------------------------------------------------
+
+6.1. Variables de entorno
+- Toda credencial debe venir de variables de entorno:
+  - DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT.
+  - AUTH_SECRET_KEY (para JWT local).
+  - SUPABASE_URL, SUPABASE_ANON_KEY, etc. (si se usan).
+- Proveer al menos:
+  - `.env.example` con nombres de variables (sin valores sensibles).
+
+6.2. Entornos previstos
+- `development`: entorno local.
+- `staging` (futuro): entorno pre-producción.
+- `production`: entorno final (AWS Lambda + API Gateway).
+
+6.3. Configuración centralizada
+- Implementar módulo de configuración (por ejemplo `app/infrastructure/config.py`) que:
+  - Lea variables de entorno.
+  - Valide la presencia de valores obligatorios.
+  - Exponga una clase/objeto de configuración.
+
+--------------------------------------------------
+7. OBSERVABILIDAD, LOGGING Y ERRORES
+--------------------------------------------------
+
+7.1. Logging
+- Backend:
+  - Usar logging estructurado (JSON) si es posible.
+  - Definir niveles: DEBUG (dev), INFO, WARNING, ERROR.
+  - Loguear:
+    - Errores de aplicación (excepciones).
+    - Eventos importantes (creación de usuarios, cambios de estado, etc.).
+- No loguear:
+  - Passwords ni información sensible.
+
+7.2. Manejo de errores
+- Backend:
+  - Definir un manejo centralizado de excepciones (FastAPI exception handlers).
+  - Nunca devolver stack traces al cliente.
+  - Responder con códigos HTTP correctos (400, 401, 403, 404, 500, etc.).
+- Frontend:
+  - Manejar errores de API de forma amigable:
+    - Mensajes claros al usuario.
+    - Manejo de token expirado (redirigir a login, etc.).
+
+--------------------------------------------------
+8. SEGURIDAD
+--------------------------------------------------
+
+8.1. General
+- HTTPS en entornos públicos (staging, prod).
+- CORS:
+  - Configurar CORS en backend para sólo permitir orígenes confiables.
+- Headers de seguridad:
+  - Uso de headers recomendados (Content-Security-Policy, X-Frame-Options, etc.) cuando se despliegue.
+
+8.2. Datos sensibles
+- No registrar datos sensibles en logs.
+- Cifrar passwords con algoritmo robusto (ej. bcrypt).
+- Tokens:
+  - Usar expiración razonable.
+  - Soportar refresh tokens si se decide.
+
+--------------------------------------------------
+9. RENDIMIENTO Y ESCALABILIDAD
+--------------------------------------------------
+
+9.1. Backend
+- Endpoints deben ser async (si se usa FastAPI async) para mejor escalabilidad.
+- Evitar hacer trabajo intensivo dentro del thread del request:
+  - Pensar en colas / jobs para operaciones pesadas en el futuro.
+
+9.2. Base de datos
+- Usar paginación en endpoints que devuelven listas grandes.
+- Definir índices adecuados.
+
+9.3. Frontend
+- Carga perezosa (lazy loading) de rutas/páginas pesadas.
+- Reutilizar componentes, evitar re-renders innecesarios.
+
+--------------------------------------------------
+10. TESTING Y CALIDAD
+--------------------------------------------------
+
+10.1. Testing backend
+- Tipos de tests:
+  - Unit tests para dominio y use cases.
+  - Integration tests para repositorios y endpoints.
+- Herramientas sugeridas:
+  - pytest.
+  - httpx para tests de endpoints.
+- Cobertura:
+  - Priorizar cobertura en reglas de negocio y flujos críticos (auth, operaciones principales).
+
+10.2. Testing frontend
+- Testear:
+  - Componentes críticos.
+  - Flujos de login / logout.
+- Herramientas sugeridas:
+  - Vitest / Jest.
+  - Testing Library para componentes.
+
+--------------------------------------------------
+11. EXPERIENCIA DE DESARROLLO (DX)
+--------------------------------------------------
+
+11.1. Scripts
+- Proveer scripts para:
+  - Levantar backend en local.
+  - Levantar frontend en local.
+  - Correr tests.
+- Documentarlos en un archivo README técnico.
+
+11.2. Docker (opcional pero muy recomendado)
+- Definir:
+  - Dockerfile backend.
+  - Dockerfile frontend o uso de un sólo contenedor para el frontend estático.
+  - docker-compose para entorno local (DB, backend, frontend).
+
+--------------------------------------------------
+12. INSTRUCCIONES PARA CURSOR / IA
+--------------------------------------------------
+
+12.1. Consideraciones generales
+- Siempre que la IA genere código:
+  - Debe respetar este documento de requisitos no funcionales.
+  - Debe mantener la separación de capas (Dominio, Aplicación, Infraestructura, Presentación).
+  - Debe usar interfaces/puertos para:
+    - Autenticación (AuthProvider).
+    - Repositorios de acceso a datos.
+  - Debe preparar el código para una futura migración a:
+    - AWS Cognito (auth).
+    - AWS Lambda + API Gateway (backend).
+- Cualquier nueva funcionalidad debe preguntarse:
+  - ¿Respeta la arquitectura desacoplada definida?
+  - ¿Es fácil de portar a un entorno serverless?
+  - ¿Evita acoplamientos fuertes con proveedores específicos?
+
+FIN DEL DOCUMENTO

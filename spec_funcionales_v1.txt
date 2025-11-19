@@ -1,0 +1,574 @@
+ESPECIFICACIÓN DE REQUERIMIENTOS FUNCIONALES (V1)
+
+Documento de alcance funcional para la primera versión del módulo Gestión de Equipo → Panel de Socios.
+Este archivo se utiliza como guía de implementación para el software que se generará con Cursor.
+
+⸻
+
+1. AUTENTICACIÓN Y ACCESO
+
+1.1. Pantalla de Login
+	•	El usuario accede al sistema desde una pantalla inicial de autenticación.
+	•	Campos mínimos:
+	•	Email
+	•	Password
+	•	Acciones:
+	•	Login
+	•	Recuperar contraseña (mock en v1)
+	•	Registrar usuario (opcional en v1; puede quedar inhabilitado)
+	•	Validaciones:
+	•	Email válido
+	•	Password requerido
+	•	Estados:
+	•	Cargando
+	•	Error de credenciales
+	•	Éxito → redirige al Panel General del Equipo
+
+1.2. Sesión
+	•	La sesión debe persistir mientras el token sea válido.
+	•	Si el token expira o es inválido → redirigir al login.
+
+⸻
+
+2. PANEL PRINCIPAL DEL EQUIPO
+
+Al autenticarse, el usuario entra a un layout general compuesto por:
+	•	Barra lateral (sidebar) con secciones:
+	1.	Home - Vista general del equipo (nombre, logo, descripción)
+	2.	Panel de socios (legacy, redirige a Finanzas → Socios)
+	3.	Finanzas → Socios (nuevo módulo principal)
+	4.	Plantel de jugadores
+	5.	Asistentes (chat con asistentes IA)
+	6.	Gestión de prensa (futuro)
+	7.	Configuración general (futuro)
+	•	Área de contenido principal donde se cargan los módulos.
+
+⸻
+
+2.1. HOME
+
+Pantalla inicial del dashboard que muestra:
+	•	Nombre del equipo (desde teams.name o campaigns.team_name si existe campaña activa)
+	•	Logo del equipo (desde campaigns.team_logo si existe campaña activa)
+	•	Descripción/Bio del equipo (desde campaigns.team_bio si existe campaña activa)
+	•	Si no hay campaña activa, muestra solo el nombre del equipo desde teams.name
+
+⸻
+
+3. PANEL DE SOCIOS (PRIMER MÓDULO FUNCIONAL - LEGACY)
+
+El Panel de Socios tiene dos grandes áreas principales:
+	1.	Cuenta Corriente del Equipo (core funcional)
+	2.	Dashboard financiero del equipo (primeros charts)
+
+3.1. Estructura General
+	•	Pantalla dividida en:
+	•	Encabezado con selector de rango de fechas.
+	•	Tabs:
+	•	Cuenta Corriente
+	•	Dashboard
+	•	(Futuro) Socios
+	•	(Futuro) Configuración de cuotas
+	•	Tabla principal con movimientos y/o charts según la pestaña activa.
+
+⸻
+
+3.2. PANTALLA: CREACIÓN DE CAMPAÑA DE SOCIOS
+
+Esta pantalla permite al delegado/administrador del equipo configurar una nueva campaña de socios (Cuota Social Amateur / Socios Coquita). Es el primer paso para lanzar la campaña.
+
+3.2.1. Objetivo
+	•	Configurar la identidad del equipo y los parámetros de la campaña de socios antes de publicarla.
+	•	Permitir guardar borradores para completar la configuración en múltiples sesiones.
+	•	Publicar la campaña cuando esté lista.
+
+3.2.2. Campos Visibles
+
+3.2.2.1. Bloque de Identidad del Equipo
+	•	Logo del Equipo:
+	•	Vista previa de imagen (redonda o cuadrada según guidelines).
+	•	Botón para subir/cambiar logo.
+	•	Formatos aceptados: JPG, PNG, GIF.
+	•	Tamaño máximo: 5MB.
+	•	Nombre del Equipo:
+	•	Campo de texto (obligatorio).
+	•	Solo lectura si ya existe en el modelo del equipo.
+	•	Editable solo si corresponde según la arquitectura actual.
+	•	Bio / Descripción Corta del Equipo:
+	•	Textarea corto (opcional).
+	•	Permite una descripción breve del equipo.
+
+3.2.2.2. Bloque de Configuración de la Campaña
+	•	Monto de la Cuota Mensual:
+	•	Campo numérico obligatorio.
+	•	Debe ser mayor a 0.
+	•	Soporta decimales (ej: 1000.50).
+	•	Moneda:
+	•	Selector/combobox.
+	•	Por defecto: ARS (pesos argentinos).
+	•	Opciones disponibles: ARS, USD, EUR.
+	•	Diseño preparado para agregar más monedas en el futuro.
+	•	Montos Alternativos Opcionales:
+	•	Lista editable de montos adicionales.
+	•	Permite agregar múltiples montos (ej: +10%, +20%).
+	•	Opcional: el usuario puede no agregar montos alternativos.
+	•	Cada monto debe ser mayor a 0 si se ingresa.
+	•	Botón para agregar nuevo monto alternativo.
+	•	Botón para eliminar cada monto individual.
+	•	Forma de Pago:
+	•	Selector o chips/badges de medios de pago.
+	•	Por ahora solo admite Mercado Pago.
+	•	Mercado Pago aparece seleccionado por defecto.
+	•	Diseño preparado para futuras opciones (Stripe, PayPal, etc.).
+
+3.2.3. Acciones Principales
+	•	Guardar Borrador:
+	•	Botón secundario.
+	•	Guarda la configuración sin publicar.
+	•	Permite continuar editando en otra sesión.
+	•	Estado: "draft".
+	•	Publicar Campaña:
+	•	Botón principal (acción destacada).
+	•	Publica la campaña y la hace activa.
+	•	Estado: "published".
+	•	Después de publicar, redirige al Panel de Socios.
+
+3.2.4. Validaciones
+	•	Campos obligatorios:
+	•	Nombre del equipo (no puede estar vacío).
+	•	Monto mensual (debe ser mayor a 0).
+	•	Validaciones de formato:
+	•	Monto mensual debe ser numérico y positivo.
+	•	Montos alternativos (si se ingresan) deben ser numéricos y positivos.
+	•	Logo (si se sube) no puede exceder 5MB.
+	•	Validaciones de negocio:
+	•	No se puede publicar una campaña sin monto mensual válido.
+
+3.2.5. Estados y Comportamiento
+	•	Estado de carga inicial:
+	•	Muestra indicador de carga mientras se obtienen los datos del equipo.
+	•	Estado de guardado:
+	•	Botones deshabilitados durante el guardado/publicación.
+	•	Mensaje de "Guardando..." o "Publicando..." en el botón correspondiente.
+	•	Manejo de errores:
+	•	Muestra mensaje de error claro si falla el guardado o publicación.
+	•	Los errores se muestran en un bloque destacado en la parte superior.
+	•	Éxito:
+	•	Al guardar borrador: muestra mensaje de confirmación.
+	•	Al publicar: muestra mensaje de confirmación y redirige al Panel de Socios.
+
+3.2.6. Integración con Backend (Notas de Implementación)
+	•	La pantalla actualmente utiliza stubs para las operaciones de guardado y publicación.
+	•	En una iteración futura, se conectará a endpoints del backend:
+	•	POST /api/v1/campaigns/draft (guardar borrador)
+	•	POST /api/v1/campaigns/publish (publicar campaña)
+	•	GET /api/v1/campaigns/current (obtener campaña actual)
+	•	Los datos del equipo (nombre, moneda por defecto) se obtienen del endpoint existente:
+	•	GET /api/v1/teams/current
+	•	El logo y la bio del equipo no están aún en el modelo del backend; se prepara el código para su futura implementación.
+
+⸻
+
+4. CUENTA CORRIENTE DEL EQUIPO
+
+Es el componente central de V1.
+
+4.1. Objetivo
+
+Representar todos los ingresos y egresos financieros del equipo de forma consolidada.
+
+4.2. Tipos de Movimientos
+
+4.2.1. INGRESOS
+	1.	Cuotas mensuales de socios
+	•	Recurrentes
+	•	Generan un ingreso cada mes por cada socio activo
+	•	Monto configurable
+	•	Moneda por defecto: ARS (pesos argentinos)
+	•	Cada socio tiene un link de pago para activar su suscripción
+	2.	Suscripción recurrente de sponsors
+	•	Similar a la cuota, pero asociada a un sponsor
+	•	También genera ingresos recurrentes
+	3.	Colectas
+	•	Son ingresos únicos
+	•	Pueden ser:
+	•	Públicas (cualquiera puede aportar)
+	•	Privadas con invitados específicos
+	•	Cada colecta genera:
+	•	Un link público/privado
+	•	Multiples ingresos individuales asociados a esa colecta
+	4.	Aportes individuales
+	•	Ingresos únicos
+	•	No asociados a suscripción ni colecta
+
+4.2.2. EGRESOS
+
+Incluyen cualquier salida del fondo común:
+	1.	Cashout
+	•	Retiro de fondos hacia una cuenta bancaria
+	•	Tiene asociado un fee configurable
+	2.	Fees e impuestos
+	•	Egresos automáticos o manuales por comisiones/impuestos
+	3.	Transferencias o compras a proveedores
+	•	Se deja para una iteración futura (upgrade).
+
+⸻
+
+5. CONFIGURACIÓN DE CUOTA MENSUAL (SOCIOS)
+
+5.1. Pantalla / modal de configuración
+
+Debe permitirse:
+	•	Definir el monto mensual
+	•	Definir moneda (default ARS)
+	•	Habilitar o deshabilitar suscripción
+	•	Regenerar link de pago
+	•	Visualizar cuantos socios están suscriptos
+
+5.2. Lógica
+	•	Al cambiar el monto, los próximos ciclos deben usar el nuevo monto.
+	•	No actualizar retroactivamente los movimientos ya liquidados.
+
+⸻
+
+6. LINK DE PAGO
+
+6.1. Requerimientos iniciales
+	•	Cada socio tiene su propio link único de suscripción.
+	•	Cada sponsor tiene su link único de suscripción.
+	•	Cada colecta tiene su link independiente.
+
+6.2. Proveedor de pago
+	•	V1: mock o integración mínima, sólo almacenar:
+	•	URL del link
+	•	Estado (activo/inactivo)
+	•	Tipo de proveedor (ej: “mercado_pago” o “manual”)
+	•	Futuro (v2): Integración real con Mercado Pago recurrente.
+	•	Futuro (v3): Stripe.
+
+6.3. Flexibilidad
+
+El sistema debe permitir:
+	•	Cambiar el proveedor sin alterar la lógica central.
+	•	Registrar pagos manuales.
+
+⸻
+
+7. VISUALIZACIÓN DE LA CUENTA CORRIENTE
+
+7.1. Tabla principal
+
+Columnas sugeridas:
+	•	Fecha
+	•	Tipo de movimiento (Cuota, Colecta, Aporte, Sponsor, Fee, Cashout)
+	•	Origen (nombre socio / nombre colecta)
+	•	Monto (positivo o negativo)
+	•	Medio de pago (contado, mercado pago, manual)
+	•	Estado (confirmado / pendiente)
+	•	Acciones (ver detalle)
+
+7.2. Filtros
+	•	Por fecha
+	•	Por tipo de movimiento
+	•	Por socio
+	•	Por estado
+	•	Por método de pago
+
+7.3. Detalle de movimiento
+
+Cada ítem debe mostrar:
+	•	ID del movimiento
+	•	Tipo
+	•	Fecha
+	•	Usuario asociado (si aplica)
+	•	Monto bruto
+	•	Fees aplicados
+	•	Monto neto
+	•	Medio de pago
+	•	Datos adicionales según tipo:
+	•	Cuota: mes correspondiente, ID socio
+	•	Colecta: ID colecta, nombre aportante
+	•	Cashout: método, porcentaje de fee
+
+⸻
+
+8. DASHBOARD DE SOCIOS
+
+La segunda pestaña del Panel de Socios.
+
+8.1. Objetivo
+
+Dar visibilidad al equipo sobre:
+	•	Evolución de ingresos
+	•	Evolución de egresos
+	•	Cantidad de socios activos
+	•	Retención y crecimiento
+
+8.2. Visualizaciones mínimas
+	1.	Gráfico de barras: ingresos mensuales
+	2.	Gráfico de donut: distribución de ingresos por tipo
+	3.	KPIs inmediatas:
+	•	Total ingresado en el mes
+	•	Total egresado
+	•	Balance neto del mes
+	•	Socios activos vs socios inactivos
+	4.	Serie temporal: evolución de socios en el tiempo
+
+8.3. Filtros
+	•	Mes / Año
+	•	Rango dinámico
+
+⸻
+
+9. MODELADO DE DATOS (ALTO NIVEL)
+
+(Esto es funcional, no incluye detalles técnicos del ORM, que van en otra especificación.)
+
+9.1. Entidades Principales
+
+1. TEAM
+	•	id
+	•	name
+	•	currency_default (ARS)
+
+2. MEMBER (socio)
+	•	id
+	•	team_id
+	•	name
+	•	email
+	•	status (active/inactive)
+	•	subscription_link
+	•	subscription_status (active/paused/cancelled)
+
+3. SPONSOR
+	•	id
+	•	team_id
+	•	name
+	•	subscription_link
+	•	subscription_status
+
+4. COLLECTA
+	•	id
+	•	team_id
+	•	title
+	•	description
+	•	is_public
+	•	link_public
+	•	invited_members (lista)
+	•	status
+
+5. MOVIMIENTO (cuenta corriente)
+	•	id
+	•	team_id
+	•	fecha
+	•	tipo (cuota, colecta, aporte, sponsor, fee, cashout)
+	•	monto_bruto
+	•	monto_fee
+	•	monto_neto
+	•	moneda
+	•	metodo_pago
+	•	origen_tipo (member / sponsor / colecta / manual)
+	•	origen_id
+
+6. CONFIG_CUOTA
+	•	team_id
+	•	monto
+	•	moneda
+	•	provider (ej “mercado_pago” / “manual”)
+	•	status
+
+⸻
+
+10. PROCESOS PRINCIPALES (FLUJOS)
+
+10.1. Creación de campaña de socios
+	1.	Usuario accede a la pantalla de "Creación de campaña de socios".
+	2.	El sistema carga los datos del equipo (nombre, moneda por defecto).
+	3.	Usuario completa:
+	•	Identidad del equipo (logo, nombre, bio).
+	•	Configuración de la campaña (monto mensual, moneda, montos alternativos, forma de pago).
+	4.	Usuario puede:
+	•	Guardar borrador (para continuar después).
+	•	Publicar campaña (la hace activa).
+	5.	Al publicar, la campaña queda activa y disponible para los socios.
+
+10.2. Alta o edición de cuota mensual
+	1.	Usuario abre Configuración.
+	2.	Define monto mensual.
+	3.	Se confirma.
+	4.	Se actualiza el valor a usarse para nuevos ciclos.
+
+10.3. Generación de ingreso por cuota
+	1.	Socio accede al link de pago.
+	2.	Realiza pago (mock V1).
+	3.	El pago se registra como movimiento ingreso tipo cuota.
+
+10.4. Creación de colecta
+	1.	Usuario crea colecta.
+	2.	El sistema genera un link.
+	3.	Invitados reciben link o se publica.
+	4.	Cada aporte genera un "movimiento ingreso tipo colecta".
+
+10.5. Cashout
+	1.	Usuario solicita retiro.
+	2.	Sistema calcula fee.
+	3.	Se registra movimiento egreso.
+
+⸻
+
+11. FLEXIBILIDAD DEL SISTEMA DE PAGOS
+
+Objetivo
+
+El sistema de pagos debe ser intercambiable sin romper:
+	•	Cuenta corriente
+	•	Dashboard
+	•	Flujos de negocio
+	•	Entidades
+
+Reglas:
+	•	Cada movimiento debe registrar claramente el proveedor (provider)
+	•	Debe existir una interfaz proveedor de pago (PaymentProvider)
+	•	Implementaciones esperadas:
+	•	PaymentProviderManual
+	•	PaymentProviderMercadoPago
+	•	Futuro: PaymentProviderStripe
+
+⸻
+
+⸻
+
+13. MÓDULO FINANZAS → SOCIOS (IMPLEMENTADO)
+
+13.1. Objetivo
+
+Módulo principal para la gestión completa de socios y sus campañas, reemplazando y extendiendo el Panel de Socios original.
+
+13.2. Sistema de Niveles de Equipo
+
+13.2.1. Concepto
+	•	Cada equipo tiene un nivel (level_id) de 0 a 6.
+	•	El nivel determina qué funcionalidades puede usar el equipo.
+	•	Para crear campañas de socios, el equipo debe tener nivel 1 o superior.
+
+13.2.2. Validación de Acceso
+	•	Al cargar el módulo, se verifica el nivel del equipo.
+	•	Si el equipo es nivel 0, se muestra un mensaje indicando que necesita nivel 1 para activar campaña de socios.
+	•	El botón de crear campaña está deshabilitado si el nivel es 0.
+
+13.3. Gestión de Campañas
+
+13.3.1. Campaña Activa
+	•	El sistema verifica si existe una campaña publicada (status = "published") para el equipo.
+	•	Si existe campaña activa:
+		•	Se muestra la configuración de la campaña (monto mensual, moneda, montos alternativos, forma de pago).
+		•	Se muestra el estado de la campaña (publicada).
+		•	Se permite editar la configuración (futuro).
+	•	Si no existe campaña activa:
+		•	Se muestra un botón para crear nueva campaña (solo si nivel >= 1).
+		•	Se muestra un mensaje indicando que no hay campaña activa.
+
+13.3.2. Campañas Históricas
+	•	Se muestra una lista de todas las campañas del equipo (activas e históricas).
+		•	Las campañas se ordenan por fecha de publicación (más recientes primero).
+		•	La campaña activa se excluye de esta lista (ya se muestra arriba).
+		•	Cada campaña muestra:
+			•	Nombre/identificador
+			•	Fecha de publicación
+			•	Estado (draft, published)
+			•	Monto mensual configurado
+
+13.4. Lista de Socios
+
+13.4.1. Información Mostrada
+	•	Lista completa de todos los miembros del equipo.
+	•	Para cada socio se muestra:
+		•	Nombre completo (combinación de first_name y last_name de userprofile, o name de members como fallback)
+		•	Username (desde userprofile.username)
+		•	Email (desde members.email)
+		•	Estado de suscripción (subscription_status)
+		•	Link de suscripción (subscription_link)
+		•	Fecha de creación
+
+13.4.2. Integración con Userprofile
+	•	Los miembros están vinculados a la tabla userprofile mediante userprofile_id.
+	•	Si existe userprofile_id, se obtienen:
+		•	username
+		•	first_name
+		•	last_name
+	•	El nombre para mostrar se construye priorizando first_name + last_name, luego name de members.
+
+13.5. Evolución de Pagos por Socio
+
+13.5.1. Acceso
+	•	Al hacer clic en un socio de la lista, se abre un modal/popup con su evolución de pagos.
+
+13.5.2. Información Mostrada
+	•	Nombre del socio y username.
+	•	Lista completa de pagos (cuotas) asociados al socio:
+		•	Fecha del pago
+		•	Monto bruto
+		•	Monto de fee
+		•	Monto neto
+		•	Estado (confirmed, pending)
+		•	Tipo (cuota)
+		•	Descripción (opcional)
+	•	Totales calculados:
+		•	Total pagado (suma de monto_neto de movimientos con estado "confirmed")
+		•	Total pendiente (suma de monto_neto de movimientos con estado "pending")
+
+13.5.3. Origen de Datos
+	•	Los pagos se obtienen de la tabla movements filtrando por:
+		•	team_id = equipo del usuario actual
+		•	tipo = "cuota"
+		•	origen_tipo = "member"
+		•	origen_id = ID del socio seleccionado
+	•	Ordenados por fecha descendente (más recientes primero).
+
+13.6. Endpoints API Utilizados
+
+13.6.1. Campañas
+	•	GET /api/v1/campaigns/check-access - Verifica nivel y capacidad de crear campañas
+	•	GET /api/v1/campaigns/active - Obtiene campaña activa (published)
+	•	GET /api/v1/campaigns/all - Obtiene todas las campañas del equipo
+
+13.6.2. Socios
+	•	GET /api/v1/members/with-details - Obtiene todos los socios con datos de userprofile
+	•	GET /api/v1/members/{member_id}/evolution - Obtiene evolución de pagos de un socio
+
+13.6.3. Equipos
+	•	GET /api/v1/teams/current - Obtiene información del equipo actual (incluye level_id)
+
+13.7. Flujos Principales
+
+13.7.1. Carga Inicial
+	1.	Usuario accede a Finanzas → Socios.
+	2.	Sistema verifica nivel del equipo (check-access).
+	3.	Sistema busca campaña activa (active).
+	4.	Sistema carga todas las campañas (all).
+	5.	Sistema carga lista de socios (with-details).
+	6.	Se renderiza la interfaz según los datos obtenidos.
+
+13.7.2. Visualización de Evolución de Socio
+	1.	Usuario hace clic en un socio de la lista.
+	2.	Sistema solicita evolución de pagos (evolution).
+	3.	Sistema calcula totales (pagado y pendiente).
+	4.	Se muestra modal con la información.
+
+13.7.3. Creación de Campaña
+	1.	Usuario hace clic en "Crear Campaña" (solo si nivel >= 1).
+	2.	Redirige a la pantalla de creación de campaña (CreateCampaign).
+	3.	Usuario completa configuración.
+	4.	Usuario publica campaña.
+	5.	Al regresar, se muestra la nueva campaña activa.
+
+⸻
+
+14. POSTA DE FUTURAS ITERACIONES (NO IMPLEMENTAR AHORA)
+	•	Transferencias entre equipos
+	•	Compras a proveedores
+	•	Gestión completa de socios (ABM completo)
+	•	Liquidación automática mensual
+	•	Dashboard avanzado con IA
+	•	Edición de campaña activa
+	•	Desactivar/publicar campañas históricas

@@ -1,0 +1,8 @@
+# Infrastructure layer - external adapters
+
+
+
+
+
+
+

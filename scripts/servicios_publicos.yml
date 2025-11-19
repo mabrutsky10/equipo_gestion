@@ -1,0 +1,412 @@
+openapi: 3.0.3
+info:
+  title: MAS10 Selected Public/Utility Endpoints
+  version: 1.0.0
+  description: |
+    OpenAPI 3.0 specification for a subset of MAS10 stack endpoints that are currently exposed without Cognito authorization (or are utility endpoints):
+      - STACK_BACKOFFICE (register-web, configuration, league)
+      - STACK_FOLLOWERS (search-profiles)
+      - STACK_PERFIL (location)
+    NOTE: Some response schemas are inferred from code snippets; adjust if domain objects differ.
+    Security: Endpoints listed here are presently unauthenticated; recommended to add Cognito (bearerAuth) and remove public exposure where not required.
+servers:
+  - url: https://backoffice.mas10.ar
+    description: Backoffice stack
+  - url: https://followers.mas10.ar
+    description: Followers stack
+  - url: https://profile.mas10.ar
+    description: Perfil stack
+tags:
+  - name: backoffice
+  - name: followers
+  - name: perfil
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+    RegisterWebRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        league_name:
+          type: string
+          description: Name of league to create (mutually exclusive with hash)
+        hash:
+          type: string
+          description: Base64 encoded JSON representing an existing league (contains id, type, etc.)
+      required: [email]
+      oneOf:
+        - required: [league_name]
+        - required: [hash]
+    League:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required: [id, name]
+    LeagueListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/League'
+        metadata:
+          type: object
+          description: Metadata describing league fields
+        config:
+          type: object
+          properties:
+            button_add:
+              type: boolean
+      required: [data]
+    RegisterWebResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          description: Created user profile summary
+          properties:
+            email:
+              type: string
+              format: email
+            first_name:
+              type: string
+            last_name:
+              type: string
+            role:
+              type: string
+            league:
+              type: integer
+          required: [email]
+        league_id:
+          type: integer
+      required: [data]
+    AppConfiguration:
+      type: object
+      description: Generic configuration flags (structure varies by role and auth state)
+      additionalProperties: true
+    SearchProfilesParams:
+      type: object
+      properties:
+        username:
+          type: string
+          nullable: true
+        table:
+          type: string
+          nullable: true
+        recommendation:
+          type: boolean
+        details:
+          type: boolean
+        page:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+    ProfileSearchResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        display_name:
+          type: string
+        avatar_url:
+          type: string
+      required: [id, username]
+    ProfileSearchResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileSearchResult'
+      required: [data]
+    RecommendationResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileSearchResult'
+    LocationRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        id_profile:
+          type: integer
+        table_name:
+          type: string
+        country:
+          type: string
+        province:
+          type: string
+        locality:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+      required: [id, id_profile]
+    LocationGrouped:
+      type: object
+      properties:
+        id_profile:
+          type: integer
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocationRecord'
+      required: [id_profile, locations]
+    LocationResponse:
+      type: object
+      properties:
+        data:
+          oneOf:
+            - type: array
+              items:
+                $ref: '#/components/schemas/LocationRecord'
+            - type: array
+              items:
+                $ref: '#/components/schemas/LocationGrouped'
+      required: [data]
+paths:
+  /register-web:
+    post:
+      tags: [backoffice]
+      summary: Register web user (optionally create league)
+      description: |
+        Creates a userprofile entry. If league_name is provided a new league is created; alternatively a base64 hash of an existing league object can be sent.
+        Currently exposed without Cognito auth (should be secured).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterWebRequest'
+            examples:
+              createLeague:
+                value:
+                  email: example@domain.com
+                  first_name: Ada
+                  last_name: Lovelace
+                  league_name: Liga Ejemplo
+              existingLeague:
+                value:
+                  email: user@domain.com
+                  hash: "eyJpZCI6MSwidHlwZSI6ImxlYWd1ZSJ9" # base64 of {"id":1,"type":"league"}
+      responses:
+        '200':
+          description: User created or already existed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterWebResponse'
+        '400':
+          description: Bad request / validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+  /configuration:
+    get:
+      tags: [backoffice]
+      summary: Retrieve application configuration for caller
+      description: Returns configuration flags depending on role or anonymous access.
+      responses:
+        '200':
+            description: Configuration object
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/AppConfiguration'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+  /league:
+    get:
+      tags: [backoffice]
+      summary: List leagues or retrieve by id / team
+      parameters:
+        - in: query
+          name: id
+          schema:
+            type: integer
+          required: false
+        - in: query
+          name: id_team
+          schema:
+            type: integer
+          required: false
+      responses:
+        '200':
+          description: League list or single league context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeagueListResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+  /search-profiles:
+    get:
+      tags: [followers]
+      summary: Search, list, or get recommended profiles
+      description: |
+        Performs one of: detailed follower list (details=true), recommendations (recommendation=true with no username/table), or generic search.
+      parameters:
+        - in: query
+          name: username
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: table
+          schema:
+            type: string
+            description: followers|following etc.
+          required: false
+        - in: query
+          name: recommendation
+          schema:
+            type: boolean
+          required: false
+        - in: query
+          name: details
+          schema:
+            type: boolean
+          required: false
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 0
+          required: false
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+          required: false
+      responses:
+        '200':
+          description: Profile data
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ProfileSearchResponse'
+                  - $ref: '#/components/schemas/RecommendationResponse'
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+  /location:
+    get:
+      tags: [perfil]
+      summary: Retrieve location profile records (single, by profile, or by hierarchical filters)
+      parameters:
+        - in: query
+          name: id
+          schema:
+            type: integer
+          required: false
+        - in: query
+          name: id_profile
+          schema:
+            type: integer
+          required: false
+        - in: query
+          name: table_name
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: country
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: province
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: locality
+          schema:
+            type: string
+          required: false
+      responses:
+        '200':
+          description: Location data (raw or grouped by profile)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationResponse'
+        '400':
+          description: Missing/invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+componentsExtensions:
+  # Guidance section (non-standard key) for future hardening
+  hardeningRecommendations:
+    - Secure all non-OPTIONS methods with bearerAuth.
+    - Add 429 responses (rate limiting) for register-web & search-profiles.
+    - Validate body for register-web against stricter pattern constraints.
+    - Return standardized error envelope {"error":{"code":"<string>","message":"<string>"}}.

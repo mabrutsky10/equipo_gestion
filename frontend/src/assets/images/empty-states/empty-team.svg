@@ -1,0 +1,26 @@
+<svg width="400" height="300" viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="300" fill="#F3F4F6"/>
+  
+  <!-- Stadium/Field representation -->
+  <rect x="0" y="200" width="400" height="100" fill="#E5E7EB"/>
+  <line x1="0" y1="250" x2="400" y2="250" stroke="#D1D5DB" stroke-width="2" stroke-dasharray="5,5"/>
+  <circle cx="200" cy="250" r="60" fill="none" stroke="#D1D5DB" stroke-width="2"/>
+  <line x1="200" y1="200" x2="200" y2="300" stroke="#D1D5DB" stroke-width="2"/>
+  
+  <!-- Team silhouette/icon in center -->
+  <g transform="translate(200, 150)">
+    <!-- Shield shape -->
+    <path d="M -40 -30 Q -40 -50 0 -50 Q 40 -50 40 -30 L 40 30 Q 40 50 0 50 Q -40 50 -40 30 Z" 
+          fill="#D1D5DB" stroke="#9CA3AF" stroke-width="2"/>
+    <!-- Simple team icon inside shield -->
+    <circle cx="0" cy="0" r="15" fill="#9CA3AF" opacity="0.5"/>
+    <path d="M -20 10 L 0 -10 L 20 10" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" fill="none"/>
+  </g>
+  
+  <!-- Text below -->
+  <text x="200" y="280" font-family="Arial, sans-serif" font-size="14" fill="#6B7280" text-anchor="middle" font-weight="500">
+    Sin imagen del equipo
+  </text>
+</svg>
+
