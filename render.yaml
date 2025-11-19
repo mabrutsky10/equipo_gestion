@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: equipo-gestion-backend
+    runtime: python
+    plan: free
+    repo: https://github.com/mabrutsky10/equipo_gestion
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.presentation.api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: AUTH_SECRET_KEY
+        sync: false
+      - key: AUTH_ALGORITHM
+        value: "HS256"
+      - key: AUTH_ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: API_V1_PREFIX
+        value: "/api/v1"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ENVIRONMENT
+        value: "production"
+    healthCheckPath: /
+
