@@ -79,6 +79,14 @@ export const campaignService = {
   },
 
   /**
+   * Get public campaign by slug (no auth required)
+   */
+  getPublicCampaignBySlug: async (landingSlug) => {
+    const response = await api.get(`/campaigns/public/by-slug/${landingSlug}`)
+    return response.data
+  },
+
+  /**
    * Check if user can create campaigns based on team level
    * @returns {Promise<Object>} Access information with level_id and can_create_campaign
    */

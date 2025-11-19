@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { campaignService } from '../../services/campaignService'
 import { memberService } from '../../services/memberService'
 import { teamService } from '../../services/teamService'
+import SociosLandingPreview from '../SociosLanding/SociosLandingPreview'
 
 const FinanzasSocios = () => {
   const [activeCampaign, setActiveCampaign] = useState(null)
@@ -12,6 +13,7 @@ const FinanzasSocios = () => {
   const [memberEvolution, setMemberEvolution] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [copiedLink, setCopiedLink] = useState('')
 
   useEffect(() => {
     loadData()
@@ -89,6 +91,29 @@ const FinanzasSocios = () => {
       month: 'long',
       day: 'numeric',
     })
+  }
+
+  const normalizeToSlug = (value) => {
+    if (!value) return ''
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  }
+
+  const getLandingShareLink = (campaign) => {
+    if (!campaign) return ''
+    const slug = campaign.landing_slug || `${normalizeToSlug(campaign.team_name) || 'equipo'}-${campaign.team_id || 'demo'}`
+    if (typeof window === 'undefined') return ''
+    return `${window.location.origin}/equipos/${slug}/socios`
+  }
+
+  const handleCopyLandingLink = async (link) => {
+    if (!link || typeof navigator === 'undefined' || !navigator.clipboard) return
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopiedLink(link)
+      setTimeout(() => setCopiedLink(''), 2000)
+    } catch (err) {
+      console.error('No se pudo copiar el link', err)
+    }
   }
 
   const getMembersKPIMessage = () => {
@@ -252,6 +277,8 @@ const FinanzasSocios = () => {
     return <SociosSkeleton />
   }
 
+  const activeLandingLink = activeCampaign ? getLandingShareLink(activeCampaign) : ''
+
   return (
     <div className="space-y-6">
       {error && (
@@ -262,7 +289,8 @@ const FinanzasSocios = () => {
 
       {/* Active Campaign Section */}
       {activeCampaign ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-900">
               Campaña Activa
@@ -317,8 +345,78 @@ const FinanzasSocios = () => {
                 <p className="text-gray-900">{formatDate(activeCampaign.date_published)}</p>
               </div>
             )}
+
+            {activeCampaign.mercado_pago_link && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Link de Mercado Pago
+                </label>
+                <div className="flex flex-col md:flex-row md:items-center gap-3">
+                  <span className="text-sm text-gray-700 break-all">{activeCampaign.mercado_pago_link}</span>
+                  <a
+                    href={activeCampaign.mercado_pago_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-md hover:bg-green-700"
+                  >
+                    Abrir link
+                  </a>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Landing pública
+              </label>
+              <div className="flex flex-col md:flex-row md:items-center gap-3">
+                <span className="text-sm text-gray-700 break-all">
+                  {activeLandingLink || 'Se generará automáticamente al publicar la campaña'}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyLandingLink(activeLandingLink)}
+                    disabled={!activeLandingLink}
+                    className="px-4 py-2 text-sm font-semibold border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    {copiedLink === activeLandingLink ? 'Copiado' : 'Copiar link'}
+                  </button>
+                  {activeLandingLink && (
+                    <a
+                      href={activeLandingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                    >
+                      Abrir landing
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 space-y-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Vista previa pública</h3>
+              <p className="text-sm text-gray-500">Compartí esta landing con tu comunidad para sumar socios.</p>
+            </div>
+            {activeLandingLink && (
+              <a
+                href={activeLandingLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+              >
+                Ver landing pública
+              </a>
+            )}
+          </div>
+          <SociosLandingPreview campaign={activeCampaign} shareLink={activeLandingLink} variant="embedded" />
+        </div>
+        </>
       ) : (
         /* No Active Campaign - Show Create Form or Level Warning */
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -629,47 +727,116 @@ const formatCalculatorCurrency = (amount) => {
 
 // Create Campaign Form Component (Inline)
 const CreateCampaignForm = ({ onSuccess }) => {
+  const [teamInfo, setTeamInfo] = useState(null)
   const [monthlyAmount, setMonthlyAmount] = useState('3500')
   const [currency, setCurrency] = useState('ARS')
   const [alternativeAmounts, setAlternativeAmounts] = useState([])
-  const [paymentMethod, setPaymentMethod] = useState('mercado_pago')
+  const [teamLogo, setTeamLogo] = useState('')
+  const [teamPhotoUrl, setTeamPhotoUrl] = useState('')
+  const [teamBio, setTeamBio] = useState('')
+  const [tournamentName, setTournamentName] = useState('')
+  const [mercadoPagoLink, setMercadoPagoLink] = useState('')
+  const [rafflePrizes, setRafflePrizes] = useState([{ id: Date.now(), title: '', description: '' }])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  
-  // Calculator inputs
   const [jugadores, setJugadores] = useState(20)
   const [sociosPorJugador, setSociosPorJugador] = useState(7)
-  
-  // Calculate results
+
+  useEffect(() => {
+    const loadTeam = async () => {
+      try {
+        const team = await teamService.getCurrentTeam()
+        setTeamInfo(team)
+      } catch (err) {
+        console.error('Error al cargar el equipo', err)
+      }
+    }
+    loadTeam()
+  }, [])
+
   const indiceCoquita = parseFloat(monthlyAmount) || 0
   const calculatorResults = calculateResults(indiceCoquita, jugadores, sociosPorJugador)
 
-  const handleSave = async (status) => {
+  const filteredAlternativeAmounts = alternativeAmounts
+    .filter((item) => item.amount)
+    .map((item) => parseFloat(item.amount))
+
+  const filteredPrizes = rafflePrizes
+    .filter((item) => item.title || item.description)
+    .map((item) => ({
+      title: item.title,
+      description: item.description,
+    }))
+
+  const slugifyTeam = () => {
+    if (!teamInfo) return 'tu-equipo'
+    const base = (teamInfo.name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    return `${base || 'equipo'}-${teamInfo.id || 'demo'}`
+  }
+
+  const previewShareLink =
+    typeof window !== 'undefined' && teamInfo ? `${window.location.origin}/equipos/${slugifyTeam()}/socios` : ''
+
+  const previewCampaign = {
+    team_name: teamInfo?.name,
+    team_logo: teamLogo,
+    team_photo_url: teamPhotoUrl,
+    team_bio: teamBio,
+    tournament_name: tournamentName,
+    monthly_amount: parseFloat(monthlyAmount) || 0,
+    currency,
+    mercado_pago_link: mercadoPagoLink,
+    raffle_prizes: filteredPrizes,
+  }
+
+  const isValidUrl = (value) => {
+    if (!value) return false
+    try {
+      const parsed = new URL(value)
+      return ['http:', 'https:'].includes(parsed.protocol)
+    } catch {
+      return false
+    }
+  }
+
+  const handlePublish = async () => {
+    if (!teamInfo) {
+      setError('Todavía estamos cargando los datos del equipo.')
+      return
+    }
     if (!monthlyAmount || parseFloat(monthlyAmount) <= 0) {
       setError('El monto mensual debe ser mayor a 0')
+      return
+    }
+    if (!mercadoPagoLink) {
+      setError('Agrega el link de Mercado Pago para cobrar la cuota')
+      return
+    }
+    if (!isValidUrl(mercadoPagoLink)) {
+      setError('El link de Mercado Pago no es válido')
       return
     }
 
     setSaving(true)
     setError('')
     try {
-      const team = await teamService.getCurrentTeam()
-      const campaignData = {
-        team_name: team.name,
+      await campaignService.publishCampaign({
+        team_name: teamInfo.name,
+        team_logo: teamLogo || null,
+        team_bio: teamBio || null,
+        tournament_name: tournamentName || null,
+        team_photo_url: teamPhotoUrl || null,
         monthly_amount: parseFloat(monthlyAmount),
         currency,
-        alternative_amounts: alternativeAmounts
-          .filter((item) => item.amount)
-          .map((item) => parseFloat(item.amount)),
-        payment_method: paymentMethod,
-        status,
-      }
-
-      if (status === 'draft') {
-        await campaignService.saveDraft(campaignData)
-      } else {
-        await campaignService.publishCampaign(campaignData)
-      }
+        alternative_amounts: filteredAlternativeAmounts,
+        payment_method: 'mercado_pago',
+        mercado_pago_link: mercadoPagoLink,
+        raffle_prizes: filteredPrizes.length ? filteredPrizes : null,
+        status: 'published',
+      })
       onSuccess()
     } catch (err) {
       console.error('Error saving campaign:', err)
@@ -679,10 +846,27 @@ const CreateCampaignForm = ({ onSuccess }) => {
     }
   }
 
+  const handlePrizeChange = (id, field, value) => {
+    setRafflePrizes((prev) =>
+      prev.map((prize) => (prize.id === id ? { ...prize, [field]: value } : prize))
+    )
+  }
+
+  const handleAddPrize = () => {
+    setRafflePrizes((prev) => [...prev, { id: Date.now(), title: '', description: '' }])
+  }
+
+  const handleRemovePrize = (id) => {
+    setRafflePrizes((prev) => prev.filter((prize) => prize.id !== id))
+  }
+
   return (
     <div className="mt-6 space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Crear Nueva Campaña</h3>
+        <h3 className="text-lg font-semibold text-gray-900">Crear Nueva Campaña</h3>
+        <p className="text-sm text-gray-500 mt-1">
+          Configurá la información que se mostrará en tu landing pública y publicala cuando esté lista.
+        </p>
       </div>
 
       {error && (
@@ -691,188 +875,295 @@ const CreateCampaignForm = ({ onSuccess }) => {
         </div>
       )}
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Monto de la Cuota Mensual *
-        </label>
-        <div className="flex gap-4">
-          <input
-            type="number"
-            value={monthlyAmount}
-            onChange={(e) => setMonthlyAmount(e.target.value)}
-            min="0"
-            step="100"
-            className="w-48 px-3 py-2 border border-gray-300 rounded-md"
-            placeholder="3500"
-            required
-          />
-          <select
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-            className="w-32 px-3 py-2 border border-gray-300 rounded-md"
-          >
-            <option value="ARS">ARS</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-          </select>
-        </div>
-        <p className="mt-1 text-xs text-gray-500">Valor que aportará cada socio mensualmente</p>
-      </div>
-      
-      {/* Calculator Inputs */}
-      <div className="space-y-4 max-w-md">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Cantidad de jugadores
-          </label>
-          <input
-            type="range"
-            min="5"
-            max="30"
-            value={jugadores}
-            onChange={(e) => setJugadores(parseInt(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-          />
-          <div className="flex justify-between text-xs text-gray-600 mt-1">
-            <span>5</span>
-            <span className="font-semibold text-indigo-600">{jugadores}</span>
-            <span>30</span>
-          </div>
-          <p className="mt-1 text-xs text-gray-500">Entre 5 y 30 jugadores</p>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Socios por jugador
-          </label>
-          <input
-            type="range"
-            min="0"
-            max="50"
-            value={sociosPorJugador}
-            onChange={(e) => setSociosPorJugador(parseInt(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-          />
-          <div className="flex justify-between text-xs text-gray-600 mt-1">
-            <span>0</span>
-            <span className="font-semibold text-indigo-600">{sociosPorJugador}</span>
-            <span>50</span>
-          </div>
-          <p className="mt-1 text-xs text-gray-500">Cada jugador puede invitar hasta 50 socios</p>
-        </div>
-      </div>
-      
-      {/* Calculator Results - Saldo Disponible Mensual y 6 Meses */}
-      {indiceCoquita > 0 && jugadores >= 5 && sociosPorJugador > 0 && (
-        <div className="grid grid-cols-2 gap-4 max-w-md">
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="text-left">
-              <div className="text-xl font-bold text-purple-600 mb-1">
-                {formatCalculatorCurrency(calculatorResults.creditoVestuario)}
-              </div>
-              <div className="text-xs text-gray-700 font-medium">
-                Saldo Disponible Mensual
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                Ingresos en la Billetera +10
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="text-left">
-              <div className="text-xl font-bold text-purple-600 mb-1">
-                {formatCalculatorCurrency(calculatorResults.creditoVestuario * 12)}
-              </div>
-              <div className="text-xs text-gray-700 font-medium">
-                Ejemplo campaña anual
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                Saldo total en 12 meses
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Montos Alternativos Opcionales
-        </label>
-        <div className="space-y-2">
-          {alternativeAmounts.map((item) => (
-            <div key={item.id} className="flex items-center space-x-2">
+      <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6">
+        <div className="space-y-6">
+          <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-4">
+            <h4 className="text-md font-semibold text-gray-900">Identidad del equipo</h4>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del equipo</label>
               <input
-                type="number"
-                value={item.amount}
-                onChange={(e) => {
-                  setAlternativeAmounts(
-                    alternativeAmounts.map((i) =>
-                      i.id === item.id ? { ...i, amount: e.target.value } : i
-                    )
-                  )
-                }}
-                min="0"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
-                placeholder="Monto adicional"
+                type="text"
+                value={teamInfo?.name || 'Cargando...'}
+                disabled
+                className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-600"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Torneo / Competencia</label>
+              <input
+                type="text"
+                value={tournamentName}
+                onChange={(e) => setTournamentName(e.target.value)}
+                placeholder="Ej: Liga +35 Clausura"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Bio / descripción del equipo
+              </label>
+              <textarea
+                value={teamBio}
+                onChange={(e) => setTeamBio(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                placeholder="Contá quiénes son, qué sueñan y para qué necesitan la campaña."
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Escudo / logo (URL)</label>
+                <input
+                  type="url"
+                  value={teamLogo}
+                  onChange={(e) => setTeamLogo(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="https://..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Foto del equipo (URL)</label>
+                <input
+                  type="url"
+                  value={teamPhotoUrl}
+                  onChange={(e) => setTeamPhotoUrl(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="https://..."
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Monto de la cuota mensual *
+              </label>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <input
+                  type="number"
+                  value={monthlyAmount}
+                  onChange={(e) => setMonthlyAmount(e.target.value)}
+                  min="0"
+                  step="100"
+                  className="sm:w-48 px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="3500"
+                  required
+                />
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="sm:w-32 px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="ARS">ARS</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">Valor que aportará cada socio mensualmente</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Montos alternativos opcionales
+              </label>
+              <div className="space-y-2">
+                {alternativeAmounts.map((item) => (
+                  <div key={item.id} className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      value={item.amount}
+                      onChange={(e) => {
+                        setAlternativeAmounts((prev) =>
+                          prev.map((i) => (i.id === item.id ? { ...i, amount: e.target.value } : i))
+                        )
+                      }}
+                      min="0"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                      placeholder="Monto adicional"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setAlternativeAmounts((prev) => prev.filter((i) => i.id !== item.id))}
+                      className="px-3 py-2 text-red-600 hover:text-red-700"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setAlternativeAmounts((prev) => [...prev, { id: Date.now(), amount: '' }])}
+                  className="text-sm text-indigo-600 hover:text-indigo-700"
+                >
+                  + Agregar monto alternativo
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Link de Mercado Pago *</label>
+              <input
+                type="url"
+                value={mercadoPagoLink}
+                onChange={(e) => setMercadoPagoLink(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                placeholder="https://www.mercadopago.com/..."
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Es el link que usaremos para redirigir a tus socios al momento del cobro.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Forma de pago</label>
+              <p className="text-xs text-gray-500 mb-3">En esta versión solo habilitamos Mercado Pago.</p>
+              <div className="inline-flex items-center">
+                <input type="radio" checked readOnly className="mr-2" />
+                <span className="px-4 py-2 border border-indigo-500 rounded-md bg-indigo-50 text-indigo-700 font-medium">
+                  Mercado Pago
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-md font-semibold text-gray-900">Premios de los sorteos</h4>
+                <p className="text-sm text-gray-500">Mostralos en la landing para incentivar a tus socios.</p>
+              </div>
               <button
                 type="button"
-                onClick={() => setAlternativeAmounts(alternativeAmounts.filter((i) => i.id !== item.id))}
-                className="px-3 py-2 text-red-600 hover:text-red-700"
+                onClick={handleAddPrize}
+                className="text-sm text-indigo-600 font-semibold hover:text-indigo-700"
               >
-                Eliminar
+                + Agregar premio
               </button>
             </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => setAlternativeAmounts([...alternativeAmounts, { id: Date.now(), amount: '' }])}
-            className="text-sm text-indigo-600 hover:text-indigo-700"
-          >
-            + Agregar monto alternativo
-          </button>
+            <div className="space-y-3">
+              {rafflePrizes.map((prize) => (
+                <div key={prize.id} className="border border-gray-200 rounded-lg p-4 space-y-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Título</label>
+                      <input
+                        type="text"
+                        value={prize.title}
+                        onChange={(e) => handlePrizeChange(prize.id, 'title', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="Ej: Camiseta Oficial"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Descripción</label>
+                      <input
+                        type="text"
+                        value={prize.description}
+                        onChange={(e) => handlePrizeChange(prize.id, 'description', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="Ej: Sorteo mensual entre todos los socios"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePrize(prize.id)}
+                      className="text-xs text-red-500 hover:underline"
+                    >
+                      Quitar premio
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {rafflePrizes.length === 0 && (
+                <p className="text-sm text-gray-500">Aún no agregaste premios. Podés sumarlos más tarde.</p>
+              )}
+            </div>
+          </section>
+
+          <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-4">
+            <h4 className="text-md font-semibold text-gray-900">Calculadora de impacto</h4>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Cantidad de jugadores</label>
+                <input
+                  type="range"
+                  min="5"
+                  max="30"
+                  value={jugadores}
+                  onChange={(e) => setJugadores(parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-gray-600 mt-1">
+                  <span>5</span>
+                  <span className="font-semibold text-indigo-600">{jugadores}</span>
+                  <span>30</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Socios por jugador</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  value={sociosPorJugador}
+                  onChange={(e) => setSociosPorJugador(parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-gray-600 mt-1">
+                  <span>0</span>
+                  <span className="font-semibold text-indigo-600">{sociosPorJugador}</span>
+                  <span>50</span>
+                </div>
+              </div>
+            </div>
+
+            {indiceCoquita > 0 && jugadores >= 5 && sociosPorJugador > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <p className="text-xs uppercase text-purple-500 font-semibold">Saldo mensual estimado</p>
+                  <p className="text-2xl font-bold text-purple-700">
+                    {formatCalculatorCurrency(calculatorResults.creditoVestuario)}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">Ingresos en la billetera +10</p>
+                </div>
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <p className="text-xs uppercase text-purple-500 font-semibold">Campaña anual</p>
+                  <p className="text-2xl font-bold text-purple-700">
+                    {formatCalculatorCurrency(calculatorResults.creditoVestuario * 12)}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">Saldo total en 12 meses</p>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <div className="flex justify-end pt-4 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={handlePublish}
+              disabled={saving}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {saving ? 'Publicando...' : 'Publicar campaña'}
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Forma de Pago</label>
-        <p className="text-xs text-gray-500 mb-3">
-          La única forma de pago permitida es por Mercado Pago.
-        </p>
-        <label className="inline-flex items-center">
-          <input
-            type="radio"
-            name="paymentMethod"
-            value="mercado_pago"
-            checked={paymentMethod === 'mercado_pago'}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-            className="mr-2"
-            disabled
-          />
-          <span className="px-4 py-2 border border-indigo-500 rounded-md bg-indigo-50 text-indigo-700 font-medium">
-            Mercado Pago
-          </span>
-        </label>
-      </div>
-
-      <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={() => handleSave('draft')}
-          disabled={saving}
-          className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-        >
-          {saving ? 'Guardando...' : 'Guardar borrador'}
-        </button>
-        <button
-          type="button"
-          onClick={() => handleSave('published')}
-          disabled={saving}
-          className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {saving ? 'Publicando...' : 'Publicar campaña'}
-        </button>
+        <div className="space-y-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Vista previa de la landing</p>
+              <p className="text-xs text-gray-500">Así se verá tu link público al compartirlo.</p>
+            </div>
+            <span className="px-3 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded-full">
+              Live preview
+            </span>
+          </div>
+          <SociosLandingPreview campaign={previewCampaign} shareLink={previewShareLink} variant="embedded" />
+        </div>
       </div>
     </div>
   )

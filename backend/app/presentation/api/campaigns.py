@@ -22,6 +22,29 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 
+def _serialize_campaign(campaign) -> CampaignResponse:
+    return CampaignResponse(
+        id=campaign.id,
+        team_id=campaign.team_id,
+        team_name=campaign.team_name,
+        team_logo=campaign.team_logo,
+        team_bio=campaign.team_bio,
+        tournament_name=campaign.tournament_name,
+        team_photo_url=campaign.team_photo_url,
+        monthly_amount=campaign.monthly_amount,
+        currency=campaign.currency,
+        alternative_amounts=campaign.alternative_amounts,
+        payment_method=campaign.payment_method,
+        mercado_pago_link=campaign.mercado_pago_link,
+        raffle_prizes=campaign.raffle_prizes,
+        landing_slug=campaign.landing_slug,
+        status=campaign.status,
+        date_created=campaign.date_created,
+        date_published=campaign.date_published,
+        date_updated=campaign.date_updated,
+    )
+
+
 @router.get("/current", response_model=CampaignResponse)
 async def get_current_campaign(
     current_user: User = Depends(get_current_user),
@@ -45,21 +68,7 @@ async def get_current_campaign(
             detail="No campaign found for this team"
         )
     
-    return CampaignResponse(
-        id=campaign.id,
-        team_id=campaign.team_id,
-        team_name=campaign.team_name,
-        team_logo=campaign.team_logo,
-        team_bio=campaign.team_bio,
-        monthly_amount=campaign.monthly_amount,
-        currency=campaign.currency,
-        alternative_amounts=campaign.alternative_amounts,
-        payment_method=campaign.payment_method,
-        status=campaign.status,
-        date_created=campaign.date_created,
-        date_published=campaign.date_published,
-        date_updated=campaign.date_updated,
-    )
+    return _serialize_campaign(campaign)
 
 
 @router.post("/draft", response_model=CampaignResponse)
@@ -83,28 +92,18 @@ async def save_campaign_draft(
         team_name=request.team_name,
         team_logo=request.team_logo,
         team_bio=request.team_bio,
+        tournament_name=request.tournament_name,
+        team_photo_url=request.team_photo_url,
         monthly_amount=request.monthly_amount,
         currency=request.currency,
         alternative_amounts=request.alternative_amounts,
         payment_method=request.payment_method,
+        mercado_pago_link=request.mercado_pago_link,
+        raffle_prizes=request.raffle_prizes,
         status="draft",  # Force draft status for this endpoint
     )
     
-    return CampaignResponse(
-        id=campaign.id,
-        team_id=campaign.team_id,
-        team_name=campaign.team_name,
-        team_logo=campaign.team_logo,
-        team_bio=campaign.team_bio,
-        monthly_amount=campaign.monthly_amount,
-        currency=campaign.currency,
-        alternative_amounts=campaign.alternative_amounts,
-        payment_method=campaign.payment_method,
-        status=campaign.status,
-        date_created=campaign.date_created,
-        date_published=campaign.date_published,
-        date_updated=campaign.date_updated,
-    )
+    return _serialize_campaign(campaign)
 
 
 @router.post("/publish", response_model=CampaignResponse)
@@ -128,28 +127,18 @@ async def publish_campaign(
         team_name=request.team_name,
         team_logo=request.team_logo,
         team_bio=request.team_bio,
+        tournament_name=request.tournament_name,
+        team_photo_url=request.team_photo_url,
         monthly_amount=request.monthly_amount,
         currency=request.currency,
         alternative_amounts=request.alternative_amounts,
         payment_method=request.payment_method,
+        mercado_pago_link=request.mercado_pago_link,
+        raffle_prizes=request.raffle_prizes,
         status="published",  # Force published status for this endpoint
     )
     
-    return CampaignResponse(
-        id=campaign.id,
-        team_id=campaign.team_id,
-        team_name=campaign.team_name,
-        team_logo=campaign.team_logo,
-        team_bio=campaign.team_bio,
-        monthly_amount=campaign.monthly_amount,
-        currency=campaign.currency,
-        alternative_amounts=campaign.alternative_amounts,
-        payment_method=campaign.payment_method,
-        status=campaign.status,
-        date_created=campaign.date_created,
-        date_published=campaign.date_published,
-        date_updated=campaign.date_updated,
-    )
+    return _serialize_campaign(campaign)
 
 
 @router.get("/active", response_model=Optional[CampaignResponse])
@@ -171,21 +160,7 @@ async def get_active_campaign(
         if not campaign:
             return None
         
-        return CampaignResponse(
-            id=campaign.id,
-            team_id=campaign.team_id,
-            team_name=campaign.team_name,
-            team_logo=campaign.team_logo,
-            team_bio=campaign.team_bio,
-            monthly_amount=campaign.monthly_amount,
-            currency=campaign.currency,
-            alternative_amounts=campaign.alternative_amounts,
-            payment_method=campaign.payment_method,
-            status=campaign.status,
-            date_created=campaign.date_created,
-            date_published=campaign.date_published,
-            date_updated=campaign.date_updated,
-        )
+        return _serialize_campaign(campaign)
     except Exception as e:
         logger.error(f"Error fetching active campaign: {e}", exc_info=True)
         # Return None instead of raising exception to allow frontend to handle gracefully
@@ -211,24 +186,7 @@ async def get_all_campaigns(
         if not campaigns:
             return []
         
-        return [
-            CampaignResponse(
-                id=campaign.id,
-                team_id=campaign.team_id,
-                team_name=campaign.team_name,
-                team_logo=campaign.team_logo,
-                team_bio=campaign.team_bio,
-                monthly_amount=campaign.monthly_amount,
-                currency=campaign.currency,
-                alternative_amounts=campaign.alternative_amounts,
-                payment_method=campaign.payment_method,
-                status=campaign.status,
-                date_created=campaign.date_created,
-                date_published=campaign.date_published,
-                date_updated=campaign.date_updated,
-            )
-            for campaign in campaigns
-        ]
+        return [_serialize_campaign(campaign) for campaign in campaigns]
     except Exception as e:
         logger.error(f"Error fetching all campaigns: {e}", exc_info=True)
         # Return empty list instead of raising exception to allow frontend to handle gracefully
@@ -329,3 +287,21 @@ async def check_campaign_access(
         response["next_level"] = None
     
     return response
+
+
+@router.get("/public/by-slug/{landing_slug}", response_model=CampaignResponse)
+async def get_public_campaign_by_slug(
+    landing_slug: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public endpoint that returns the published campaign for a given slug."""
+    repository = SQLAlchemyCampaignRepository(db)
+    campaign = await repository.get_published_by_slug(landing_slug)
+    
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found"
+        )
+    
+    return _serialize_campaign(campaign)

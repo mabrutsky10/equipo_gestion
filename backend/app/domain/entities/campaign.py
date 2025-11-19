@@ -11,10 +11,15 @@ class Campaign:
     team_name: str
     team_logo: Optional[str] = None
     team_bio: Optional[str] = None
+    tournament_name: Optional[str] = None
+    team_photo_url: Optional[str] = None
     monthly_amount: Decimal = Decimal("0.00")
     currency: str = "ARS"
     alternative_amounts: Optional[List[Decimal]] = None
     payment_method: str = "mercado_pago"
+    mercado_pago_link: Optional[str] = None
+    raffle_prizes: Optional[List[dict]] = None
+    landing_slug: Optional[str] = None
     status: str = "draft"  # draft, published, inactive
     date_created: Optional[datetime] = None
     date_published: Optional[datetime] = None

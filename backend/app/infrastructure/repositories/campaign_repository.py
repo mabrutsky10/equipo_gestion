@@ -25,10 +25,15 @@ class SQLAlchemyCampaignRepository(CampaignRepository):
             team_name=model.team_name,
             team_logo=model.team_logo,
             team_bio=model.team_bio,
+            tournament_name=model.tournament_name,
+            team_photo_url=model.team_photo_url,
             monthly_amount=Decimal(str(model.monthly_amount)),
             currency=model.currency,
             alternative_amounts=alternative_amounts,
             payment_method=model.payment_method,
+            mercado_pago_link=model.mercado_pago_link,
+            raffle_prizes=model.raffle_prizes,
+            landing_slug=model.landing_slug,
             status=model.status,
             date_created=model.date_created,
             date_published=model.date_published,
@@ -47,10 +52,15 @@ class SQLAlchemyCampaignRepository(CampaignRepository):
             team_name=entity.team_name,
             team_logo=entity.team_logo,
             team_bio=entity.team_bio,
+            tournament_name=entity.tournament_name,
+            team_photo_url=entity.team_photo_url,
             monthly_amount=entity.monthly_amount,
             currency=entity.currency,
             alternative_amounts=alternative_amounts,
             payment_method=entity.payment_method,
+            mercado_pago_link=entity.mercado_pago_link,
+            raffle_prizes=entity.raffle_prizes,
+            landing_slug=entity.landing_slug,
             status=entity.status,
             date_created=entity.date_created or datetime.now(timezone.utc),
             date_published=entity.date_published,
@@ -109,6 +119,8 @@ class SQLAlchemyCampaignRepository(CampaignRepository):
         model.team_name = campaign.team_name
         model.team_logo = campaign.team_logo
         model.team_bio = campaign.team_bio
+        model.tournament_name = campaign.tournament_name
+        model.team_photo_url = campaign.team_photo_url
         model.monthly_amount = campaign.monthly_amount
         model.currency = campaign.currency
         if campaign.alternative_amounts:
@@ -116,6 +128,10 @@ class SQLAlchemyCampaignRepository(CampaignRepository):
         else:
             model.alternative_amounts = None
         model.payment_method = campaign.payment_method
+        model.mercado_pago_link = campaign.mercado_pago_link
+        model.raffle_prizes = campaign.raffle_prizes
+        if campaign.landing_slug:
+            model.landing_slug = campaign.landing_slug
         model.status = campaign.status
         model.date_published = campaign.date_published
         
@@ -144,4 +160,17 @@ class SQLAlchemyCampaignRepository(CampaignRepository):
         )
         models = result.scalars().all()
         return [self._to_entity(model) for model in models]
+
+    async def get_published_by_slug(self, landing_slug: str) -> Optional[Campaign]:
+        """Get the published campaign by its public slug."""
+        if not landing_slug:
+            return None
+        result = await self.session.execute(
+            select(CampaignModel)
+            .where(CampaignModel.landing_slug == landing_slug)
+            .where(CampaignModel.status == "published")
+            .limit(1)
+        )
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
 

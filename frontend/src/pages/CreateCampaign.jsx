@@ -116,38 +116,6 @@ const CreateCampaign = () => {
     return true
   }
 
-  const handleSaveDraft = async () => {
-    if (!validateForm()) return
-
-    setSaving(true)
-    setError('')
-
-    try {
-      const campaignData = {
-        team_name: teamName,
-        team_logo: teamLogoPreview, // For now, we'll store as base64. In production, upload to storage
-        team_bio: teamBio,
-        monthly_amount: parseFloat(monthlyAmount),
-        currency,
-        alternative_amounts: alternativeAmounts
-          .filter(item => item.amount)
-          .map(item => parseFloat(item.amount)),
-        payment_method: paymentMethod,
-        status: 'draft'
-      }
-
-      await campaignService.saveDraft(campaignData)
-      
-      // Show success message (could use a toast library)
-      alert('Borrador guardado exitosamente')
-    } catch (error) {
-      console.error('Error saving draft:', error)
-      setError('Error al guardar el borrador. Por favor, intenta nuevamente.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const handlePublishCampaign = async () => {
     if (!validateForm()) return
 
@@ -423,15 +391,7 @@ const CreateCampaign = () => {
       </div>
 
       {/* Actions */}
-      <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={handleSaveDraft}
-          disabled={saving || loading}
-          className="px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-        >
-          {saving ? 'Guardando...' : 'Guardar borrador'}
-        </button>
+      <div className="flex justify-end pt-4 border-t border-gray-200">
         <button
           type="button"
           onClick={handlePublishCampaign}

@@ -146,6 +146,11 @@ class CampaignRepository(ABC):
         pass
     
     @abstractmethod
+    async def get_published_by_slug(self, landing_slug: str) -> Optional[Campaign]:
+        """Get the published campaign by its public slug."""
+        pass
+    
+    @abstractmethod
     async def get_all_by_team_id(self, team_id: int) -> List[Campaign]:
         """Get all campaigns for a team."""
         pass
