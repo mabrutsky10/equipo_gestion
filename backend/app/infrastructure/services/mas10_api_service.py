@@ -6,6 +6,8 @@ logger = logging.getLogger(__name__)
 
 MAS10_BASE_URL = 'https://serviceweb.mas10.ar'
 BACKOFFICE_BASE_URL = 'https://backoffice.mas10.ar'
+FOLLOWERS_BASE_URL = 'https://followers.mas10.ar'
+PROFILE_BASE_URL = 'https://profile.mas10.ar'
 
 
 class Mas10ApiService:
@@ -34,7 +36,7 @@ class Mas10ApiService:
             
             logger.info(f"Mas10ApiService: Calling {url} with params: {params}")
             
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
                 response = await client.get(url, params=params)
                 logger.info(f"Mas10ApiService: Response status: {response.status_code}")
                 
@@ -84,7 +86,7 @@ class Mas10ApiService:
                 "id_tournament": tournament_id
             }
             
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
                 response = await client.get(url, params=params)
                 response.raise_for_status()
                 
@@ -146,5 +148,228 @@ class Mas10ApiService:
             return None
         except Exception as e:
             logger.error(f"Unexpected error fetching matches for {username}: {e}")
+            return None
+    
+    async def search_profiles(
+        self,
+        username: Optional[str] = None,
+        recommendation: bool = False,
+        details: bool = True,
+        page: int = 0,
+        limit: int = 50,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Search profiles using the followers stack /search-profiles endpoint.
+        
+        Args:
+            username: Optional username to search for
+            recommendation: Whether to get recommendations
+            details: Whether to get detailed information
+            page: Page number for pagination
+            limit: Number of results per page (max 200)
+            
+        Returns:
+            Profiles data dictionary or None if not found
+        """
+        try:
+            url = f"{FOLLOWERS_BASE_URL}/search-profiles"
+            params = {
+                "page": page,
+                "limit": min(limit, 200),  # Enforce max limit
+            }
+            
+            if username:
+                params["username"] = username
+            if recommendation:
+                params["recommendation"] = "true"
+            if details:
+                params["details"] = "true"
+            
+            logger.info(f"Mas10ApiService: Calling {url} with params: {params}")
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url, params=params)
+                logger.info(f"Mas10ApiService: Response status: {response.status_code}")
+                
+                response.raise_for_status()
+                
+                data = response.json()
+                
+                if data.get("error", False):
+                    logger.warning(f"Followers API returned error: {data}")
+                    return None
+                
+                return data
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error searching profiles: {e.response.status_code}. Response: {e.response.text[:200]}")
+            return None
+        except httpx.RequestError as e:
+            logger.error(f"Request error searching profiles: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error searching profiles: {e}", exc_info=True)
+            return None
+    
+    async def get_profile_location(self, id_profile: int) -> Optional[Dict[str, Any]]:
+        """
+        Get location data for a profile using the profile stack /location endpoint.
+        
+        Args:
+            id_profile: Profile ID
+            
+        Returns:
+            Location data dictionary or None if not found
+        """
+        try:
+            url = f"{PROFILE_BASE_URL}/location"
+            params = {
+                "id_profile": id_profile,
+            }
+            
+            logger.info(f"Mas10ApiService: Calling {url} with params: {params}")
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url, params=params)
+                logger.info(f"Mas10ApiService: Response status: {response.status_code}")
+                
+                response.raise_for_status()
+                
+                data = response.json()
+                
+                if data.get("error", False):
+                    logger.warning(f"Profile API returned error: {data}")
+                    return None
+                
+                return data
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error fetching location: {e.response.status_code}. Response: {e.response.text[:200]}")
+            return None
+        except httpx.RequestError as e:
+            logger.error(f"Request error fetching location: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error fetching location: {e}", exc_info=True)
+            return None
+    
+    async def get_postulations_web(
+        self,
+        lat: Optional[float] = None,
+        lon: Optional[float] = None,
+        distance: int = 0,
+        id: int = 0,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get postulations using the postulations-web endpoint (like radar.mas10.ar).
+        
+        Args:
+            lat: Latitude
+            lon: Longitude
+            distance: Distance radius
+            id: ID parameter for pagination
+            
+        Returns:
+            Postulations data dictionary or None if not found
+        """
+        try:
+            url = f"{MAS10_BASE_URL}/postulations-web"
+            params = {
+                "distance": distance,
+                "id": id,
+            }
+            
+            if lat is not None:
+                params["lat"] = lat
+            if lon is not None:
+                params["lon"] = lon
+            
+            logger.info(f"Mas10ApiService: Calling {url} with params: {params}")
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url, params=params)
+                logger.info(f"Mas10ApiService: Response status: {response.status_code}")
+                
+                response.raise_for_status()
+                
+                data = response.json()
+                
+                if data.get("error", False):
+                    logger.warning(f"Postulations API returned error: {data}")
+                    return None
+                
+                return data
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error fetching postulations: {e.response.status_code}. Response: {e.response.text[:200]}")
+            return None
+        except httpx.RequestError as e:
+            logger.error(f"Request error fetching postulations: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error fetching postulations: {e}", exc_info=True)
+            return None
+    
+    async def search_complexs(
+        self,
+        lat: Optional[float] = None,
+        lon: Optional[float] = None,
+        nearest_cluster: int = 0,
+        last_distance: int = 0,
+        last_id: int = 0,
+        limit: int = 10,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Search complexes using the search-complexs endpoint (like radar.mas10.ar).
+        
+        Args:
+            lat: Latitude
+            lon: Longitude
+            nearest_cluster: Nearest cluster parameter
+            last_distance: Last distance for pagination
+            last_id: Last ID for pagination
+            limit: Number of results
+            
+        Returns:
+            Complexes data dictionary or None if not found
+        """
+        try:
+            url = f"{MAS10_BASE_URL}/search-complexs"
+            params = {
+                "nearestCluster": nearest_cluster,
+                "lastDistance": last_distance,
+                "lastId": last_id,
+                "limit": limit,
+            }
+            
+            if lat is not None:
+                params["lat"] = lat
+            if lon is not None:
+                params["lon"] = lon
+            
+            logger.info(f"Mas10ApiService: Calling {url} with params: {params}")
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url, params=params)
+                logger.info(f"Mas10ApiService: Response status: {response.status_code}")
+                
+                response.raise_for_status()
+                
+                data = response.json()
+                
+                if data.get("error", False):
+                    logger.warning(f"Search complexs API returned error: {data}")
+                    return None
+                
+                return data
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error searching complexs: {e.response.status_code}. Response: {e.response.text[:200]}")
+            return None
+        except httpx.RequestError as e:
+            logger.error(f"Request error searching complexs: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error searching complexs: {e}", exc_info=True)
             return None
 

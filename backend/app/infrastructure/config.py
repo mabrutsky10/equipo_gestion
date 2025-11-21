@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     
     # CORS - stored as string, converted to list via property
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://*.vercel.app"
     
     # Environment
     ENVIRONMENT: str = "development"

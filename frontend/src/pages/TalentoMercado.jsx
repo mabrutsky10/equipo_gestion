@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import {
   Plus,
   MapPin,
@@ -8,11 +8,31 @@ import {
   Filter,
   X,
 } from 'lucide-react'
+import { mas10Service } from '../services/mas10Service'
 
-const POSICIONES = ['Arquero', 'Defensor', 'Volante', 'Delantero']
+const POSICIONES = ['Arquero', 'Defensor', 'Mediocampista', 'Delantero']
 const NIVELES = ['Recreativo', 'Amateur', 'Competitivo']
 const DISPONIBILIDAD = ['Lunes a Viernes', 'Fines de Semana', 'Noches']
 const ZONAS = ['Zona Norte', 'Zona Oeste', 'Zona Sur', 'Córdoba Capital']
+const PAGE_SIZE = 21
+
+const POSITION_EQUIVALENTS = {
+  arquero: ['arquero', 'arq', 'goalkeeper', 'goal keeper', 'gk'],
+  defensor: ['defensor', 'defensa', 'defender', 'def', 'defensive'],
+  mediocampista: ['mediocampista', 'midfielder', 'volante', 'vol', 'medio', 'cm', 'cmf'],
+  delantero: ['delantero', 'forward', 'atacante', 'del', 'fw'],
+}
+
+const normalizePosition = (value) => {
+  if (!value) return ''
+  const normalizedValue = value.toString().toLowerCase()
+  for (const [key, aliases] of Object.entries(POSITION_EQUIVALENTS)) {
+    if (aliases.some((alias) => normalizedValue.includes(alias))) {
+      return key
+    }
+  }
+  return ''
+}
 
 const mockBusquedas = [
   {
@@ -78,27 +98,129 @@ const mockJugadores = [
 
 const MercadoDePasesPage = () => {
   const [busquedas, setBusquedas] = useState(mockBusquedas)
-  const [jugadores] = useState(mockJugadores)
+  const [jugadores, setJugadores] = useState([])
+  const [loadingJugadores, setLoadingJugadores] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [pagination, setPagination] = useState({
+    distance: 0,
+    id: 0,
+    hasMore: true,
+  })
+  const [location, setLocation] = useState({
+    lat: -31.42008329999999, // Default: Córdoba, Argentina
+    lon: -64.1887761,
+  })
   const [filters, setFilters] = useState({
     posicion: '',
-    nivel: '',
     zona: '',
     disponibilidad: '',
   })
+  const paginationRef = useRef(pagination)
+  const loadMoreRef = useRef(null)
+  const loadingJugadoresRef = useRef(loadingJugadores)
+
+  useEffect(() => {
+    paginationRef.current = pagination
+  }, [pagination])
+
+  useEffect(() => {
+    loadingJugadoresRef.current = loadingJugadores
+  }, [loadingJugadores])
+
+  // Load jugadores libres from API with pagination
+  const loadJugadoresLibres = useCallback(
+    async (reset = false) => {
+      const currentPagination = paginationRef.current
+      const distanceParam = reset ? 0 : currentPagination.distance
+      const idParam = reset ? 0 : currentPagination.id
+      try {
+        setLoadingJugadores(true)
+        const data = await mas10Service.getJugadoresLibres({
+          lat: location.lat,
+          lon: location.lon,
+          distance: distanceParam,
+          id: idParam,
+        })
+
+        const jugadoresData = data?.jugadores || []
+        const limitedJugadores = jugadoresData.slice(0, PAGE_SIZE)
+        if (reset) {
+          setJugadores(limitedJugadores)
+        } else {
+          setJugadores((prev) => [...prev, ...limitedJugadores])
+        }
+
+        setPagination({
+          distance: data?.next_distance ?? distanceParam,
+          id: data?.next_id ?? idParam,
+          hasMore: data?.has_more ?? false,
+        })
+      } catch (error) {
+        console.error('Error loading jugadores libres:', error)
+        if (reset) {
+          setJugadores(mockJugadores.slice(0, PAGE_SIZE))
+          setPagination({
+            distance: 0,
+            id: 0,
+            hasMore: false,
+          })
+        }
+      } finally {
+        setLoadingJugadores(false)
+      }
+    },
+    [location.lat, location.lon]
+  )
+
+  useEffect(() => {
+    loadJugadoresLibres(true)
+  }, [loadJugadoresLibres]) // Reload when location changes
+
+  useEffect(() => {
+    if (!loadMoreRef.current) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const target = entries[0]
+        if (
+          target.isIntersecting &&
+          paginationRef.current.hasMore &&
+          !loadingJugadoresRef.current
+        ) {
+          loadJugadoresLibres(false)
+        }
+      },
+      {
+        root: null,
+        rootMargin: '200px',
+        threshold: 0,
+      }
+    )
+
+    const currentRef = loadMoreRef.current
+    observer.observe(currentRef)
+
+    return () => {
+      observer.unobserve(currentRef)
+      observer.disconnect()
+    }
+  }, [loadJugadoresLibres, jugadores.length, pagination.hasMore])
 
   const filteredJugadores = useMemo(() => {
+    const normalizedFilterPosicion = normalizePosition(filters.posicion)
+
     return jugadores.filter((jugador) => {
-      if (filters.posicion && jugador.posicion !== filters.posicion) return false
-      if (filters.nivel && jugador.nivel !== filters.nivel) return false
-      if (filters.zona && !jugador.zona.toLowerCase().includes(filters.zona.toLowerCase()))
-        return false
-      if (
-        filters.disponibilidad &&
-        !jugador.disponibilidad.toLowerCase().includes(filters.disponibilidad.toLowerCase())
-      )
-        return false
-      return true
+      const jugadorPosicionNormalizada = normalizePosition(jugador.posicion)
+      const jugadorZona = (jugador.ubicacion || jugador.zona || '').toLowerCase()
+      const jugadorDisponibilidad = (jugador.disponibilidad || '').toLowerCase()
+
+      const posicionMatch =
+        !normalizedFilterPosicion || jugadorPosicionNormalizada === normalizedFilterPosicion
+      const zonaMatch =
+        !filters.zona || jugadorZona.includes(filters.zona.toLowerCase())
+      const disponibilidadMatch =
+        !filters.disponibilidad || jugadorDisponibilidad.includes(filters.disponibilidad.toLowerCase())
+
+      return posicionMatch && zonaMatch && disponibilidadMatch
     })
   }, [jugadores, filters])
 
@@ -178,17 +300,39 @@ const MercadoDePasesPage = () => {
           <FiltrosJugadores filters={filters} onChange={setFilters} />
         </div>
 
-        {filteredJugadores.length === 0 ? (
+        {loadingJugadores && jugadores.length === 0 ? (
+          <div className="text-center py-10">
+            <div className="text-gray-500">Cargando jugadores libres...</div>
+          </div>
+        ) : filteredJugadores.length === 0 ? (
           <EmptyState
             title="No encontramos jugadores con esos filtros"
             description="Probá ajustando la búsqueda o ampliando el radio."
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {filteredJugadores.map((jugador) => (
-              <JugadorLibreCard key={jugador.id} data={jugador} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {filteredJugadores.map((jugador, index) => (
+                <JugadorLibreCard key={jugador.id || jugador.username || index} data={jugador} />
+              ))}
+            </div>
+            {!loadingJugadores && pagination.hasMore && (
+              <div className="text-center py-4">
+                <button
+                  onClick={() => loadJugadoresLibres(false)}
+                  disabled={loadingJugadores}
+                  className="px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cargar más jugadores
+                </button>
+              </div>
+            )}
+            {loadingJugadores && jugadores.length > 0 && (
+              <div className="text-center py-4">
+                <div className="text-gray-500">Cargando más jugadores...</div>
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -202,7 +346,7 @@ const MercadoDePasesPage = () => {
 }
 
 const BusquedaCard = ({ data, onPause, onDelete }) => (
-  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col space-y-4">
+  <div className="bg-white rounded-2xl border-2 border-black/20 shadow-sm p-5 flex flex-col space-y-4">
     <div className="flex items-start justify-between">
       <div>
         <h3 className="text-lg font-semibold text-gray-900">{data.posicion}</h3>
@@ -252,46 +396,56 @@ const BusquedaCard = ({ data, onPause, onDelete }) => (
 )
 
 const JugadorLibreCard = ({ data }) => (
-  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-4">
+  <div className="bg-white rounded-2xl border-2 border-black/20 shadow-sm p-4 flex flex-col h-full space-y-4">
     <div className="flex items-center gap-3">
       <img
         src={
           data.avatar ||
           `https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=${encodeURIComponent(
-            data.nombre
+            data.nombre || data.username || 'Jugador'
           )}`
         }
-        alt={data.nombre}
+        alt={data.nombre || data.username}
         className="w-16 h-16 rounded-full object-cover border border-gray-200"
       />
       <div>
-        <div className="text-lg font-semibold text-gray-900">{data.nombre}</div>
-        <div className="text-sm text-gray-500">{data.username}</div>
+        <div className="text-lg font-semibold text-gray-900">{data.nombre || data.username || 'Sin nombre'}</div>
+        <div className="text-sm text-gray-500">{data.username ? `@${data.username}` : ''}</div>
       </div>
     </div>
 
     <div className="flex flex-wrap gap-2 text-xs">
-      <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold">
-        <Shield size={12} className="inline mr-1" />
-        {data.posicion}
-      </span>
-      <span className="px-3 py-1 rounded-full bg-green-100 text-green-800 font-semibold">
-        {data.nivel}
-      </span>
-      <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-600 flex items-center gap-1">
-        <Clock size={12} />
-        {data.disponibilidad}
-      </span>
+      {data.posicion && (
+        <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold">
+          <Shield size={12} className="inline mr-1" />
+          {data.posicion}
+        </span>
+      )}
+      {data.nivel && (
+        <span className="px-3 py-1 rounded-full bg-green-100 text-green-800 font-semibold">
+          {data.nivel}
+        </span>
+      )}
+      {data.disponibilidad && (
+        <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-600 flex items-center gap-1">
+          <Clock size={12} />
+          {data.disponibilidad}
+        </span>
+      )}
     </div>
 
-    <div className="flex items-center gap-2 text-sm text-gray-600">
-      <MapPin size={16} className="text-gray-400" />
-      {data.zona}
-    </div>
+    {data.ubicacion && (
+      <div className="flex items-center gap-2 text-sm text-gray-600">
+        <MapPin size={16} className="text-gray-400" />
+        {data.ubicacion}
+      </div>
+    )}
 
-    <p className="text-sm text-gray-600 border-t border-gray-100 pt-3">{data.descripcion}</p>
+    {data.descripcion && (
+      <p className="text-sm text-gray-600 border-t border-gray-100 pt-3">{data.descripcion}</p>
+    )}
 
-    <div className="pt-3 border-t border-gray-100 flex items-center gap-3">
+    <div className="pt-3 border-t border-gray-100 flex items-center gap-3 mt-auto">
       <button className="flex-1 bg-green-600 text-white text-sm font-semibold py-2 rounded-xl shadow-sm hover:bg-green-700">
         Invitar
       </button>
@@ -316,18 +470,12 @@ const FiltrosJugadores = ({ filters, onChange }) => {
         <Filter size={16} />
         Filtros
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 flex-1">
         <SelectField
           label="Posición"
           value={filters.posicion}
           options={['', ...POSICIONES]}
           onChange={(value) => handleFilter('posicion', value)}
-        />
-        <SelectField
-          label="Nivel"
-          value={filters.nivel}
-          options={['', ...NIVELES]}
-          onChange={(value) => handleFilter('nivel', value)}
         />
         <SelectField
           label="Zona"

@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.db.session import get_db
 from app.presentation.api.dependencies import get_current_user
 from app.domain.entities.user import User
 from app.infrastructure.repositories.team_repository import SQLAlchemyTeamRepository
 from app.infrastructure.services.mas10_api_service import Mas10ApiService
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
+from pydantic import BaseModel
 import logging
 
 logger = logging.getLogger(__name__)
@@ -203,4 +204,146 @@ async def get_team_players_from_mas10(
     }
     
     return players_data
+
+
+class JugadorLibreResponse(BaseModel):
+    """Response model for free players (jugadores libres)."""
+    nombre: str
+    username: str
+    posicion: Optional[str] = None
+    ubicacion: Optional[str] = None
+    descripcion: Optional[str] = None
+    avatar: Optional[str] = None
+
+
+class JugadoresLibresResponse(BaseModel):
+    """Response model containing jugadores libres and pagination info."""
+    jugadores: List[JugadorLibreResponse]
+    has_more: bool = False
+    next_distance: Optional[float] = None
+    next_id: Optional[int] = None
+
+
+@router.get("/jugadores-libres", response_model=JugadoresLibresResponse)
+async def get_jugadores_libres(
+    lat: Optional[float] = Query(None, description="Latitude"),
+    lon: Optional[float] = Query(None, description="Longitude"),
+    distance: int = Query(0, ge=0, description="Distance radius"),
+    id: int = Query(0, ge=0, description="ID parameter for pagination"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> JugadoresLibresResponse:
+    """
+    Get free players (jugadores libres) using the postulations-web endpoint from radar.mas10.ar.
+    Returns an array with: nombre, username, posicion, ubicacion, descripcion.
+    """
+    try:
+        mas10_service = Mas10ApiService()
+        
+        # Get default location from team if available
+        default_lat = lat
+        default_lon = lon
+        
+        if default_lat is None or default_lon is None:
+            # Try to get team location as default
+            if current_user.team_id:
+                repository = SQLAlchemyTeamRepository(db)
+                team = await repository.get_by_id(current_user.team_id)
+                # For now, using default coordinates (Córdoba, Argentina)
+                # TODO: Get actual team location if available in team model
+                if default_lat is None:
+                    default_lat = -31.42008329999999  # Default: Córdoba
+                if default_lon is None:
+                    default_lon = -64.1887761  # Default: Córdoba
+            else:
+                # Default coordinates if no team
+                if default_lat is None:
+                    default_lat = -31.42008329999999  # Default: Córdoba
+                if default_lon is None:
+                    default_lon = -64.1887761  # Default: Córdoba
+        
+        # Calculate pagination parameters
+        # Based on radar.mas10.ar, pagination uses distance and id
+        pagination_distance = distance
+        pagination_id = id
+        
+        # Call postulations-web endpoint
+        postulations_data = await mas10_service.get_postulations_web(
+            lat=default_lat,
+            lon=default_lon,
+            distance=pagination_distance,
+            id=pagination_id,
+        )
+        
+        if not postulations_data or not postulations_data.get("data"):
+            logger.warning("No postulations data returned from postulations-web")
+            return JugadoresLibresResponse(jugadores=[], has_more=False, next_distance=pagination_distance, next_id=pagination_id)
+        
+        postulations_container = postulations_data.get("data") or {}
+        postulations = postulations_container.get("postulations", [])
+        jugadores_libres = []
+        filtered_postulations: List[Dict[str, Any]] = []
+        
+        # Process each postulation (only users)
+        for postulation in postulations:
+            if postulation.get("type") != "user":
+                continue
+            
+            filtered_postulations.append(postulation)
+            
+            first_name = (postulation.get("first_name") or "").strip()
+            last_name = (postulation.get("last_name") or "").strip()
+            nombre = (f"{first_name} {last_name}".strip()) or postulation.get("username") or "Sin nombre"
+            username = postulation.get("username") or postulation.get("user") or ""
+            posicion = postulation.get("position") or None
+            descripcion = (postulation.get("comment_info") or postulation.get("bio") or postulation.get("description") or "").strip() or None
+            
+            # Build ubicacion from location dict
+            location_info = postulation.get("location") or {}
+            parts = [
+                location_info.get("locality"),
+                location_info.get("province"),
+                location_info.get("country"),
+            ]
+            ubicacion = ", ".join([part for part in parts if part]) or None
+            
+            avatar = (
+                postulation.get("avatar")
+                or postulation.get("avatar_100")
+                or postulation.get("avatar_50")
+            )
+            
+            jugador = JugadorLibreResponse(
+                nombre=nombre,
+                username=username,
+                posicion=posicion,
+                ubicacion=ubicacion,
+                descripcion=descripcion,
+                avatar=avatar,
+            )
+            jugadores_libres.append(jugador)
+        
+        has_more = bool(postulations_container.get("has_more"))
+        next_distance = pagination_distance
+        next_id = pagination_id
+        
+        if filtered_postulations:
+            last_postulation = filtered_postulations[-1]
+            next_distance = last_postulation.get("distance", pagination_distance)
+            next_id = last_postulation.get("id", pagination_id)
+        
+        logger.info(f"Returning {len(jugadores_libres)} jugadores libres")
+        return JugadoresLibresResponse(
+            jugadores=jugadores_libres,
+            has_more=has_more,
+            next_distance=next_distance,
+            next_id=next_id,
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching jugadores libres: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching jugadores libres: {str(e)}"
+        )
 

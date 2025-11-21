@@ -6,6 +6,8 @@ import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import ChatWindowKela from './ChatWindowKela'
 import ChatWindowGuillote from './ChatWindowGuillote'
+import ChatWindowPela from './ChatWindowPela'
+import ChatWindowChori from './ChatWindowChori'
 
 const TEAM_LEVELS = [
   {
@@ -66,6 +68,16 @@ const ChatWindow = ({ assistant, assistants, onClose }) => {
   // Si es Guillote, usar el componente especializado
   if (assistant?.id === 'guillote') {
     return <ChatWindowGuillote assistants={assistants} assistant={assistant} onClose={onClose} />
+  }
+
+  // Si es Pela, usar el componente especializado
+  if (assistant?.id === 'pela') {
+    return <ChatWindowPela assistants={assistants} assistant={assistant} onClose={onClose} />
+  }
+
+  // Si es Chori, usar el componente especializado
+  if (assistant?.id === 'chori') {
+    return <ChatWindowChori assistants={assistants} assistant={assistant} onClose={onClose} />
   }
 
   useEffect(() => {

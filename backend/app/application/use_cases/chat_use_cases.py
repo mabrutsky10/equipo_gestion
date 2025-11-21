@@ -9,8 +9,10 @@ from app.domain.entities.assistant import Assistant
 
 logger = logging.getLogger(__name__)
 
-# N8N Webhook URL for Guillote
+# N8N Webhook URLs
 N8N_GUILLOTE_WEBHOOK_URL = "https://data10.app.n8n.cloud/webhook/5186feaf-5801-4576-8ebc-044bef043a28/chat"
+N8N_PELA_WEBHOOK_URL = "https://data10.app.n8n.cloud/webhook/e3538923-0cb3-4abc-8c83-9bfef2f7eb82/chat"
+N8N_CHORI_WEBHOOK_URL = "https://data10.app.n8n.cloud/webhook/6c4e8569-0c19-4132-8cc5-328cd83a3cd2/chat"
 
 
 class GetAssistantsUseCase:
@@ -60,10 +62,14 @@ class SendMessageUseCase:
             saved_user_message = await self.chat_repository.create(user_message)
             
             # Generate assistant reply
-            # For Guillote, use N8N webhook; for others, use mock
+            # For Guillote, Pela, and Chori, use N8N webhook; for others, use mock
             try:
                 if assistant_id == 'guillote':
                     assistant_reply = await self._generate_guillote_reply(content, team_id, userprofile_id or user_id)
+                elif assistant_id == 'pela':
+                    assistant_reply = await self._generate_pela_reply(content, team_id, userprofile_id or user_id)
+                elif assistant_id == 'chori':
+                    assistant_reply = await self._generate_chori_reply(content, team_id, userprofile_id or user_id)
                 else:
                     assistant_reply = self._generate_assistant_reply(assistant_id, content)
             except Exception as reply_error:
@@ -101,14 +107,37 @@ class SendMessageUseCase:
     async def _generate_guillote_reply(self, user_message: str, team_id: int, userprofile_id: int) -> str:
         """
         Generate reply from Guillote using N8N webhook.
-        According to N8N Chat Trigger documentation and the provided example:
-        - Format: { "sessionId": "...", "action": "sendMessage", "chatInput": "...", "userID": ..., "teamID": ... }
-        - Response can be in "output" or "text" field, or directly as text
-        Note: userID in the payload uses userprofile_id, not the users.id
+        Same format as other assistants: { "sessionId": "...", "action": "sendMessage", "chatInput": "...", "userID": ..., "teamID": ... }
+        """
+        return await self._generate_n8n_reply(
+            user_message, team_id, userprofile_id, 'guillote', N8N_GUILLOTE_WEBHOOK_URL
+        )
+    
+    async def _generate_pela_reply(self, user_message: str, team_id: int, userprofile_id: int) -> str:
+        """
+        Generate reply from Pela using N8N webhook.
+        Same format as Guillote: { "sessionId": "...", "action": "sendMessage", "chatInput": "...", "userID": ..., "teamID": ... }
+        """
+        return await self._generate_n8n_reply(
+            user_message, team_id, userprofile_id, 'pela', N8N_PELA_WEBHOOK_URL
+        )
+    
+    async def _generate_chori_reply(self, user_message: str, team_id: int, userprofile_id: int) -> str:
+        """
+        Generate reply from Chori using N8N webhook.
+        Same format as Guillote: { "sessionId": "...", "action": "sendMessage", "chatInput": "...", "userID": ..., "teamID": ... }
+        """
+        return await self._generate_n8n_reply(
+            user_message, team_id, userprofile_id, 'chori', N8N_CHORI_WEBHOOK_URL
+        )
+    
+    async def _generate_n8n_reply(self, user_message: str, team_id: int, userprofile_id: int, assistant_id: str, webhook_url: str) -> str:
+        """
+        Generic method to generate reply from N8N webhook for any assistant.
         """
         try:
             # Generate consistent session ID (using userprofile_id for session consistency)
-            session_id = self._generate_session_id(team_id, userprofile_id, 'guillote')
+            session_id = self._generate_session_id(team_id, userprofile_id, assistant_id)
             
             # Prepare payload according to N8N Chat Trigger format
             # userID uses userprofile_id as requested
@@ -120,12 +149,12 @@ class SendMessageUseCase:
                 "teamID": team_id,
             }
             
-            logger.info(f"Calling N8N webhook for Guillote - sessionId: {session_id}, message: {user_message[:50]}..., team_id: {team_id}, userprofile_id: {userprofile_id}")
+            logger.info(f"Calling N8N webhook for {assistant_id} - sessionId: {session_id}, message: {user_message[:50]}..., team_id: {team_id}, userprofile_id: {userprofile_id}")
             logger.info(f"N8N payload: {payload}")
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    N8N_GUILLOTE_WEBHOOK_URL,
+                    webhook_url,
                     json=payload,
                     headers={"Content-Type": "application/json"},
                 )

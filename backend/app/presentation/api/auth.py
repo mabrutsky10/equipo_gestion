@@ -4,6 +4,9 @@ from app.infrastructure.db.session import get_db
 from app.application.interfaces.auth_provider import AuthProvider
 from app.presentation.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, UserResponse
 from app.presentation.api.dependencies import get_auth_provider
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -14,13 +17,25 @@ async def login(
     auth_provider: AuthProvider = Depends(get_auth_provider),
 ):
     """Login endpoint."""
-    token = await auth_provider.authenticate_user(request.email, request.password)
-    if not token:
+    logger.info(f"Login attempt for email: {request.email}")
+    try:
+        token = await auth_provider.authenticate_user(request.email, request.password)
+        if not token:
+            logger.warning(f"Authentication failed for email: {request.email}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+            )
+        logger.info(f"Login successful for email: {request.email}")
+        return LoginResponse(access_token=token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during login: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during authentication",
         )
-    return LoginResponse(access_token=token)
 
 
 @router.post("/register", response_model=UserResponse)

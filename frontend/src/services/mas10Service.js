@@ -11,5 +11,17 @@ export const mas10Service = {
     })
     return response.data
   },
+  getJugadoresLibres: async (params = {}) => {
+    const { lat, lon, distance = 0, id = 0 } = params
+    const queryParams = new URLSearchParams()
+    
+    if (lat !== undefined) queryParams.append('lat', lat)
+    if (lon !== undefined) queryParams.append('lon', lon)
+    queryParams.append('distance', distance)
+    queryParams.append('id', id)
+    
+    const response = await api.get(`/mas10/jugadores-libres?${queryParams.toString()}`)
+    return response.data
+  },
 }
 

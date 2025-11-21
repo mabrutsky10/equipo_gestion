@@ -67,13 +67,31 @@ app = FastAPI(
 )
 
 # CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Handle CORS origins - filter out wildcards as FastAPI doesn't support them directly
+cors_origins = [origin for origin in settings.cors_origins_list if "*" not in origin]
+
+# In development, allow all origins for easier testing
+# In production, use specific origins from env
+if settings.ENVIRONMENT == "development" or not cors_origins:
+    # Allow all origins in development or if no specific origins configured
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,  # Can't use credentials with wildcard
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+else:
+    # Use specific origins in production
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 
 # Include routers
 from app.presentation.api import auth, movements, collectas, dashboard, config, teams, campaigns, home, mas10, chat, members

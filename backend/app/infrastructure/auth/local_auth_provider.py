@@ -3,10 +3,13 @@ from typing import Optional
 from jose import jwt
 from jose.exceptions import JWTError
 import bcrypt
+import logging
 from app.application.interfaces.auth_provider import AuthProvider
 from app.domain.entities.user import User
 from app.infrastructure.config import settings
 from app.application.interfaces.repositories import UserRepository
+
+logger = logging.getLogger(__name__)
 
 
 class LocalAuthProvider(AuthProvider):
@@ -92,13 +95,18 @@ class LocalAuthProvider(AuthProvider):
         """Get current user from token."""
         try:
             payload = jwt.decode(token, settings.AUTH_SECRET_KEY, algorithms=[settings.AUTH_ALGORITHM])
-            user_id: int = int(payload.get("sub"))
-            if user_id is None:
+            user_id_str = payload.get("sub")
+            if user_id_str is None:
+                logger.warning("Token payload missing 'sub' field")
                 return None
-        except JWTError:
+            user_id: int = int(user_id_str)
+        except (JWTError, ValueError) as e:
+            logger.warning(f"JWT decode error: {e}")
             return None
         
         user = await self.user_repository.get_by_id(user_id)
+        if not user:
+            logger.warning(f"User with id {user_id} not found")
         return user
     
     async def refresh_token(self, token: str) -> Optional[str]:
