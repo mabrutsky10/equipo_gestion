@@ -13,11 +13,11 @@ security = HTTPBearer(auto_error=False)
 
 
 def get_auth_provider(db: AsyncSession = Depends(get_db)) -> AuthProvider:
-    """Dependency to get auth provider. In a real app, this would be injected via DI."""
+    """Dependency to get auth provider. Uses Cognito for authentication."""
     from app.infrastructure.repositories.user_repository import SQLAlchemyUserRepository
-    from app.infrastructure.auth.local_auth_provider import LocalAuthProvider
+    from app.infrastructure.auth.cognito_auth_provider import CognitoAuthProvider
     user_repo = SQLAlchemyUserRepository(db)
-    return LocalAuthProvider(user_repo)
+    return CognitoAuthProvider(user_repo)
 
 
 def get_payment_provider():

@@ -169,6 +169,10 @@ class UserRepository(ABC):
     async def get_by_id(self, user_id: int) -> Optional[User]:
         pass
 
+    @abstractmethod
+    async def update_team_id(self, user_id: int, team_id: int) -> Optional[User]:
+        pass
+
 
 class ChatRepository(ABC):
     @abstractmethod

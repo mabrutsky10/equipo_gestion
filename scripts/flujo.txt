@@ -1,0 +1,570 @@
+## Secuencia de llamadas tras autenticarse
+
+1. **Validación inmediata en `Login.tsx`.**  
+   - Apenas el usuario vuelve de Cognito, `fetchAuthSession()` comprueba si ya hay tokens vigentes.  
+   - Si los hay, dispara `checkUserStatus()` que:
+     1. Llama a `ProfileServices.getProfile()` (`GET /profile` sobre `VITE_API_URL_PROFILE`) y cachea la respuesta en `localStorage`.
+     2. Evalúa que el perfil tenga `birth_date`; si falta, redirige al onboarding de datos.
+     3. Usa `LocationServices.checkLocationStatus(profile.id)` para garantizar que exista una ubicación guardada; este helper reutiliza `ProfileServices.getProfileLocation()` (`GET /location?id_profile=…&table_name=userprofile`), cachea el resultado y define `DataContext.setLocation`.  
+     4. Si la ubicación no existe, envía al paso de onboarding de ubicación; si todo está completo, vuelve a la ruta original que disparó el login.
+
+```
+```24:108:src/pages/auth/Login.tsx
+  useEffect(() => {
+    const getSession = async () => {
+      try {
+        setCheckingSession(true);
+        const session = await fetchAuthSession();
+        if (session.tokens !== undefined) {
+          await checkUserStatus();
+        }
+      } catch (error) {
+        console.error("fetchAuthSession error", error);
+      } finally {
+        setCheckingSession(false);
+      }
+    };
+    getSession();
+  }, []);
+
+  const checkUserStatus = async () => {
+    try {
+      const response = await ProfileServices.getProfile();
+
+      if (response?.data) {
+        localStorage.setItem("profile", JSON.stringify(response.data));
+
+        if (!response.data.birth_date) {
+          navigate("/onboarding/personal_data");
+          return;
+        }
+
+        if (response.data.id) {
+          const locationStatus = await LocationServices.checkLocationStatus(
+            response.data.id
+          );
+          setLocation(locationStatus.locationData);
+
+          if (!locationStatus.hasLocation) {
+            navigate("/onboarding/location");
+            return;
+          }
+        }
+
+        navigate(from);
+      }
+    } catch (error) {
+      console.error("Error verificando estado del usuario:", error);
+    }
+  };
+```
+```
+
+2. **Registro automático de usuarios nuevos.**  
+   - Si Cognito redirige a `/auth/register`, el componente obtiene los atributos del usuario con `fetchUserAttributes()` y los manda al endpoint `POST /register` para crear el perfil en el backoffice, reutilizando `ProfileServices.register`.  
+   - Tras registrar, redirige a la pantalla solicitada originalmente y limpia `sessionStorage.redirectTo`.
+
+```
+```13:24:src/pages/auth/Register.tsx
+  const handleRegister = async () => {
+    try {
+      const userAttributes = await fetchUserAttributes();
+      await ProfileServices.register(userAttributes);
+      navigate(redirectTo);
+      sessionStorage.removeItem("redirectTo");
+    } catch (error) {
+      console.error("Error registering user: ", error);
+      signOut();
+    }
+  };
+```
+```
+
+3. **Servicios que extraen perfil y equipos.**  
+   - Todas las operaciones de perfil viven en `ProfileServices`. El método `getProfile()` (GET `/profile`) devuelve toda la ficha del usuario —datos personales, flags de onboarding y la colección `team` con las afiliaciones vigentes— y se usa tanto en el login como en los contextos globales.  
+   - El mismo módulo centraliza `register`, `updateUserProfile`, `getProfileLocation` y helpers para feeds, trayectoria, etc.
+
+```
+```47:207:src/services/ProfileServices.ts
+  getProfile: async () => {
+    const response = await axiosInstance({
+      url: "/profile",
+      method: "get",
+      baseURL: baseURLProfile,
+    });
+    return response.data;
+  },
+  ...
+  register: async (data: any) => {
+    const response = await axiosInstance({
+      url: "/register",
+      method: "post",
+      data,
+      baseURL: baseURLProfile,
+    });
+    return response.data;
+  },
+  ...
+  getProfileLocation: async (profile_id: string, table_name: string) => {
+    const response = await axiosInstance({
+      method: "get",
+      url: `/location?id_profile=${profile_id}&table_name=${table_name}`,
+      baseURL: baseURLProfile,
+    });
+    return response.data;
+  },
+```
+```
+
+4. **Chequeo y cacheo de ubicación.**  
+   - `LocationServices.checkLocationStatus()` primero revisa `localStorage` y, si no encuentra datos, llama a `ProfileServices.getProfileLocation`.  
+   - Define `hasLocation`, guarda la última ubicación obtenida y expone helpers para limpiar/consultar el estado.  
+   - Es invocado desde `Login`, `ProfileContext` y `ProtectedRoute`, por lo que siempre ocurre después de `getProfile()`.
+
+```
+```16:135:src/services/LocationServices.ts
+  checkLocationStatus: async (
+    profileId?: string | number
+  ): Promise<LocationStatus> => {
+    if (!profileId) {
+      return { hasLocation: false };
+    }
+
+    try {
+      const storedLocation = JSON.parse(
+        localStorage.getItem("location") || "{}"
+      );
+
+      if (storedLocation?.id !== null) {
+        return {
+          hasLocation: storedLocation?.id !== null,
+          locationData: Array.isArray(storedLocation)
+            ? storedLocation[0]
+            : storedLocation,
+        };
+      }
+
+      const response = await ProfileServices.getProfileLocation(
+        profileId.toString(),
+        "userprofile"
+      );
+
+      let locationExists = false;
+      if (response?.data) {
+        if (Array.isArray(response.data)) {
+          const lastLocation = response.data[response.data.length - 1];
+          locationExists =
+            response.data.length > 0 &&
+            lastLocation?.latitude &&
+            lastLocation?.longitude;
+          localStorage.setItem("location", JSON.stringify(lastLocation));
+        } else if (response.data.latitude && response.data.longitude) {
+          locationExists = response.data.latitude && response.data.longitude;
+          localStorage.setItem("location", JSON.stringify(response.data));
+        } else {
+          localStorage.setItem("location", "{}");
+        }
+      }
+
+      localStorage.setItem(
+        "userHasLocation",
+        locationExists ? "true" : "false"
+      );
+
+      return {
+        hasLocation: !!locationExists,
+        locationData: response?.data,
+      };
+    } catch (error) {
+      console.error("Error checking location status:", error);
+      return { hasLocation: false };
+    }
+  },
+```
+```
+
+5. **Guardas de ruta y orden de validaciones.**  
+   - Cada ruta privada pasa por `ProtectedRoute`, que encadena:
+     1. `fetchAuthSession()` (si no hay tokens, redirige a `/auth/login`).  
+     2. Carga del perfil (desde contexto o `localStorage`; si falta, vuelve a llamar `ProfileServices.getProfile()`).  
+     3. Validación de onboarding (`birth_date`, `localitys`, flags).  
+     4. Validación de ubicación (`LocationServices.checkLocationStatus`).  
+   - Cualquier falla en los pasos anteriores deriva al flujo correspondiente (login, onboarding personal, onboarding de ubicación).
+
+```
+```38:190:src/components/Auth/ProtectedRoute.tsx
+    const validate = async () => {
+      try {
+        const session = await fetchAuthSession();
+
+        if (session.tokens === undefined) {
+          if (requireAuth) {
+            navigate(redirectTo, {
+              state: { from: location.pathname },
+              replace: true,
+            });
+            return;
+          } else {
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        setMessage(t("Cargando perfil..."));
+        let userProfile = profile;
+        if (!userProfile?.id) {
+          const sessionProfile = JSON.parse(
+            localStorage.getItem("profile") ?? "{}"
+          );
+
+          if (!sessionProfile?.id) {
+            const response = await ProfileServices.getProfile();
+            if (!isMounted) return;
+
+            userProfile = response.data;
+            setProfile(userProfile);
+            localStorage.setItem("profile", JSON.stringify(userProfile));
+          } else {
+            userProfile = sessionProfile;
+            setProfile(userProfile);
+          }
+        }
+
+        if (!userProfile?.id) {
+          navigate(redirectTo, { replace: true });
+          return;
+        }
+
+        if (!skipOnboardingCheck) {
+          const needsOnboardingFirstStep =
+            (userProfile.onboarding === false && !userProfile.birth_date) ||
+            userProfile.onboarding === null;
+          if (needsOnboardingFirstStep) {
+            const from = location.pathname || "/";
+            sessionStorage.setItem("redirectTo", from);
+            navigate("/onboarding/personal_data", { replace: true });
+            return;
+          }
+        }
+
+        if (!skipLocationCheck) {
+          const locationStatus = await LocationServices.checkLocationStatus(
+            userProfile.id
+          );
+
+          if (!locationStatus.hasLocation) {
+            setLocation(locationStatus.locationData);
+            navigate("/onboarding/location", {
+              state: { from: location.pathname },
+              replace: true,
+            });
+            return;
+          } else {
+            setLocation(locationStatus.locationData);
+          }
+        }
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Validation error:", error);
+        if (requireAuth) {
+          navigate(redirectTo, { replace: true });
+        } else {
+          setIsLoading(false);
+        }
+      }
+    };
+```
+```
+
+6. **Contexto global del perfil.**  
+   - `ProfileProvider` ejecuta la misma secuencia (verificar sesión, cargar perfil, cachear, refrescar ubicación) para que cualquier componente pueda leer `profile` sin repetir llamadas.  
+   - `refreshProfile()` siempre hace `ProfileServices.getProfile()` y vuelve a correr `LocationServices.checkLocationStatus`.
+
+```
+```55:145:src/contexts/ProfileContext.tsx
+  const refreshProfile = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const response = await ProfileServices.getProfile();
+
+      if (!response?.error && response?.data) {
+        setProfile(response.data);
+        localStorage.setItem("profile", JSON.stringify(response.data));
+
+        if (response.data.id) {
+          const locationStatus = await LocationServices.checkLocationStatus(
+            response.data.id
+          );
+          const lastLocation =
+            locationStatus.locationData[
+              locationStatus.locationData.length - 1
+            ];
+          setLocation(lastLocation);
+        }
+      } else if (response?.error) {
+        throw new Error(response.error.message ?? "Error al cargar el perfil");
+      }
+    } catch (err) {
+      setError(err as Error);
+      clearStorageProfile();
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const loadProfile = async () => {
+      setIsLoading(true);
+      try {
+        const session = await fetchAuthSession();
+        const token = session.tokens?.accessToken?.toString();
+
+        if (!token || !session) {
+          clearStorageProfile();
+          return;
+        }
+      } catch (err) {
+        clearStorageProfile();
+        setError(err as Error);
+        setIsLoading(false);
+      }
+
+      const storedProfile = localStorage.getItem("profile");
+      if (storedProfile) {
+        try {
+          const parsedProfile = JSON.parse(storedProfile);
+          setProfile(parsedProfile);
+
+          if (parsedProfile.id) {
+            await LocationServices.checkLocationStatus(parsedProfile.id);
+          }
+        } catch (parseError) {
+          clearStorageProfile();
+        }
+      } else {
+        refreshProfile();
+      }
+    };
+
+    loadProfile();
+  }, [refreshProfile]);
+```
+```
+
+7. **Contexto de autenticación y Hub de Amplify.**  
+   - `AuthProvider` mantiene el `user` de Amplify vía `getCurrentUser()` y escucha eventos `signedIn`, `signedOut` y `tokenRefresh` mediante `Hub.listen("auth", …)`.  
+   - Expone `signOut()` que delega en `AuthServices.logout()` (limpia Cognito más caches locales) y los atajos `signInWithGoogle/Apple/Facebook` que usan `signInWithRedirect`.
+
+```
+```32:134:src/contexts/AuthContext.tsx
+  useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        if (currentUser) {
+          setUser(currentUser);
+        } else {
+          setUser(null);
+        }
+      } catch {
+        setUser(null);
+      }
+    };
+
+    initializeAuth();
+
+    const listener = Hub.listen("auth", ({ payload }) => {
+      switch (payload.event) {
+        case "signedIn":
+          setUser(payload.data);
+          break;
+        case "signedOut":
+          setUser(null);
+          break;
+        case "tokenRefresh":
+          console.log("auth tokens have been refreshed.");
+          break;
+        case "tokenRefresh_failure":
+          console.log("failure while refreshing auth tokens.");
+          setUser(null);
+          break;
+      }
+    });
+
+    return () => listener();
+  }, []);
+
+  async function signOut() {
+    try {
+      await AuthServices.logout();
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  }
+
+  async function signInWithGoogle() {
+    await signInWithRedirect({ provider: "Google" });
+  }
+
+  async function signInWithApple() {
+    await signInWithRedirect({ provider: "Apple" });
+  }
+
+  async function signInWithFacebook() {
+    await signInWithRedirect({ provider: "Facebook" });
+  }
+```
+```
+
+8. **Flujos posteriores dentro del layout autenticado.**  
+   - Al renderizar `AdminFullWidthLayout`, se monta `NotificationsSocket`, que abre un WebSocket contra `VITE_API_URL_NOTIFICATIONS` adjuntando el access token obtenido con `useAwsToken` (que a su vez llama a `fetchAuthSession`).  
+   - Este socket escucha notificaciones de chat, actualiza contadores y cachea mensajes. La conexión hace ping periódico y reintenta con backoff.
+
+```
+```95:205:src/components/Notifications/NotificationsSocket.tsx
+  const connect = async () => {
+    if (!WS_URL) {
+      console.warn("VITE_API_URL_NOTIFICATIONS not defined");
+      return;
+    }
+
+    let token: string | null = null;
+    try {
+      token = await getToken();
+    } catch (err) {
+      console.error("Error getting AWS token for notifications WS", err);
+    }
+
+    try {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+
+      let urlStr = WS_URL;
+      try {
+        const urlObj = new URL(WS_URL);
+        if (token) urlObj.searchParams.set("token", token);
+        urlStr = urlObj.toString();
+      } catch (e) {
+        console.error("Error constructing notifications WS URL", e);
+      }
+
+      wsRef.current = new WebSocket(urlStr);
+      wsRef.current.onopen = handleOnOpen;
+      wsRef.current.onmessage = handleOnMessage;
+      wsRef.current.onerror = (err) => {
+        console.error("Notifications WebSocket error", err);
+      };
+      wsRef.current.onclose = handleOnClose;
+    } catch (err) {
+      console.error("Failed to connect notifications websocket", err);
+    }
+  };
+```
+```
+
+```
+```25:52:src/hooks/useAwsToken.ts
+  const getToken = useCallback(async (): Promise<string | null> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const session = await fetchAuthSession();
+      const accessToken = session?.tokens?.accessToken?.toString() || null;
+
+      setToken(accessToken);
+      return accessToken;
+    } catch (err) {
+      setError(err as Error);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+```
+```
+
+9. **Cómo se obtiene el equipo al que pertenece el usuario.**  
+   - La respuesta de `getProfile()` incluye la colección `team`, utilizada por onboarding y otras vistas. Por ejemplo, el paso de datos personales marca `hasTeam` en función de `profile.team?.[0]`.  
+   - Con esa información el frontend sabe si exigir foto de perfil u otros requisitos.
+
+```
+```38:52:src/pages/admin/Onboarding/OnboardingUserScreen.tsx
+  useEffect(() => {
+    if (profile) {
+      if (profile?.first_name && profile?.last_name && profile?.birth_date) {
+        navigate("/onboarding/location");
+      }
+
+      setHasTeam(Boolean(profile.team?.[0]));
+      const username = profile.first_name?.split(" ")?.[0]?.toLowerCase();
+      form.setFieldsValue({
+        username: username ? username + randomNumber : "",
+        first_name: profile.first_name ?? "",
+        last_name: profile.last_name ?? "",
+        birth_date: profile.birth_date ? dayjs(profile.birth_date) : undefined,
+      });
+    }
+  }, [profile]);
+```
+```
+
+10. **Inyección del token en cada request posterior.**  
+    - `axiosInstance` añade `Authorization: Bearer <token>` en todos los requests (exceptuando ciertas rutas públicas) reutilizando `fetchAuthSession()`. Si Cognito devuelve 401/refresh vencido, redirige a `/auth/login`. Gracias a esto, una vez autenticado, cualquier servicio (`ProfileServices`, `LocationServices`, etc.) ya viaja con el token correcto y puede seguir llamando endpoints adicionales (por ejemplo, para ver el equipo, los torneos, feeds de comunidad, etc.) en el mismo orden en el que los componentes los necesitan.
+
+```
+```11:56:src/services/axiosInstance.tsx
+axiosInstance.interceptors.request.use(
+  async (config) => {
+    try {
+      const session = await fetchAuthSession();
+      const token = session?.tokens?.accessToken;
+      if (
+        token &&
+        !config.url?.includes("search-leagues") &&
+        !config.url?.includes("training-library") &&
+        !config.url?.includes("search-complexs") &&
+        !config.url?.includes("postulations-web")
+      ) {
+        config.headers.set("Authorization", `Bearer ${token}`);
+      }
+      config.headers.set("Accept", "*/*");
+    } catch (error) {
+      const typedError = error as { code: string; message: string };
+      if (
+        typedError.code === "NotAuthorizedException" &&
+        typedError.message === "Refresh Token has expired"
+      ) {
+        window.location.href = "/auth/login";
+      }
+    }
+    return config;
+  },
+  (error) => Promise.reject(error instanceof Error ? error : new Error(error?.message ?? String(error)))
+);
+
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.status === 401) {
+      window.location.href = "/auth/login";
+    }
+    return Promise.reject(error);
+  }
+);
+```
+```
+
+### Orden resumido de llamadas tras autenticarse
+
+1. `fetchAuthSession()` → verifica tokens (Login, ProtectedRoute, ProfileContext).  
+2. `ProfileServices.getProfile()` (`GET /profile`).  
+3. (Solo nuevos) `ProfileServices.register()` (`POST /register`).  
+4. `LocationServices.checkLocationStatus()` → puede invocar `ProfileServices.getProfileLocation()` (`GET /location`).  
+5. Onboarding condicional según `profile.birth_date`, `profile.localitys`, `profile.team`.  
+6. Acceso a rutas privadas (layouts) y arranque de WebSocket de notificaciones.  
+7. Cada petición subsecuente (tanto a `VITE_API_URL_PROFILE` como al resto de microservicios) usa `axiosInstance` con el bearer token, por lo que los módulos de torneos, comunidad, entrenamiento, etc., van cargando su información cuando las vistas correspondientes se montan.
+
+Con esta guía podés seguir todo el pipeline de autenticación y conocer exactamente qué servicios se invocan y en qué orden lógico se ejecutan después de que Cognito entrega un usuario autenticado.

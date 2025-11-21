@@ -47,3 +47,14 @@ class SQLAlchemyUserRepository(UserRepository):
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
+    async def update_team_id(self, user_id: int, team_id: int) -> Optional[User]:
+        result = await self.session.execute(select(UserModel).where(UserModel.id == user_id))
+        model = result.scalar_one_or_none()
+        if not model:
+            return None
+        
+        model.team_id = team_id
+        await self.session.commit()
+        await self.session.refresh(model)
+        return self._to_entity(model)
+
